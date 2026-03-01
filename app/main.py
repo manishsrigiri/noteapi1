@@ -67,7 +67,7 @@ def update_note(id: str, note: Note):
     return {"message": "Note updated successfully"}
 
 
-# ✅ Delete Note
+# ✅ Delete 
 @app.delete("/notes/{id}")
 def delete_note(id: str):
     result = collection.delete_one({"_id": id})
