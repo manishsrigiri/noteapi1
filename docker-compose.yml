@@ -1,6 +1,7 @@
 services:
+
   mongo:
-    image: mongo
+    image: mongo:6.0
     container_name: mongo
     ports:
       - "27017:27017"
@@ -10,10 +11,20 @@ services:
   fastapi:
     build: .
     container_name: fastapi
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     depends_on:
       - mongo
+
+  streamlit:
+    build: .
+    container_name: streamlit
+    command: streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    depends_on:
+      - fastapi
 
 volumes:
   mongo_data:
