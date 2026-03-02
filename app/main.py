@@ -1,79 +1,65 @@
-from fastapi import FastAPI, HTTPException
+# app/main.py
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from pymongo import MongoClient
+from typing import List
 
 app = FastAPI()
 
-client = MongoClient("mongodb://mongo:27017")
-db = client["notesdb"]
-collection = db["notes"]
-
-
+# -------------------------
+# Models
+# -------------------------
 class Note(BaseModel):
     id: str
     title: str
     content: str
 
+# -------------------------
+# MongoDB Dependency
+# -------------------------
+def get_client():
+    """Return a MongoClient instance."""
+    return MongoClient("mongodb://mongo:27017")  # Change host if needed
 
-# ✅ Create Note with Custom ID
+def get_collection(client: MongoClient = Depends(get_client)):
+    """Return the MongoDB collection object."""
+    db = client["notesdb"]
+    return db["notes"]
+
+# -------------------------
+# CRUD Endpoints
+# -------------------------
 @app.post("/notes")
-def create_note(note: Note):
-
-    # Check if ID already exists
+def create_note(note: Note, collection=Depends(get_collection)):
     if collection.find_one({"_id": note.id}):
-        raise HTTPException(status_code=400, detail="ID already exists")
+        raise HTTPException(status_code=400, detail="Note already exists")
+    collection.insert_one(note.model_dump() | {"_id": note.id})
+    return {"message": "Note created successfully"}
 
-    note_dict = note.dict()
-    note_dict["_id"] = note_dict.pop("id")
-
-    collection.insert_one(note_dict)
-
-    return {"message": "Note created successfully", "id": note_dict["_id"]}
-
-
-# ✅ Get All Notes
-@app.get("/notes")
-def get_notes():
+@app.get("/notes", response_model=List[Note])
+def get_notes(collection=Depends(get_collection)):
     notes = []
     for note in collection.find():
-        # Convert _id to string for JSON serialization
-        note["id"] = str(note.pop("_id"))
-        notes.append(note)
-    return notesS
+        notes.append(Note(id=note["_id"], title=note["title"], content=note["content"]))
+    return notes
 
-
-# ✅ Get Single Note
-@app.get("/notes/{id}")
-def get_note(id: str):
+@app.get("/notes/{id}", response_model=Note)
+def get_note(id: str, collection=Depends(get_collection)):
     note = collection.find_one({"_id": id})
-
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+    return Note(id=note["_id"], title=note["title"], content=note["content"])
 
-    note["id"] = note.pop("_id")
-    return note
-
-
-# ✅ Update Note
 @app.put("/notes/{id}")
-def update_note(id: str, note: Note):
-    result = collection.update_one(
-        {"_id": id},
-        {"$set": {"title": note.title, "content": note.content}}
-    )
-
+def update_note(id: str, note: Note, collection=Depends(get_collection)):
+    result = collection.update_one({"_id": id}, {"$set": note.model_dump()})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Note not found")
-
     return {"message": "Note updated successfully"}
 
-
-# ✅ Delete 
 @app.delete("/notes/{id}")
-def delete_note(id: str):
+def delete_note(id: str, collection=Depends(get_collection)):
     result = collection.delete_one({"_id": id})
-
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Note not found")
-
     return {"message": "Note deleted successfully"}
