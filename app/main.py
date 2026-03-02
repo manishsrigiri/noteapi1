@@ -36,9 +36,10 @@ def create_note(note: Note):
 def get_notes():
     notes = []
     for note in collection.find():
-        note["id"] = note.pop("_id")
+        # Convert _id to string for JSON serialization
+        note["id"] = str(note.pop("_id"))
         notes.append(note)
-    return notes
+    return notesS
 
 
 # ✅ Get Single Note
