@@ -1,6 +1,6 @@
 # test_main.py
 from fastapi.testclient import TestClient
-from app.main import app, get_collection
+from app.main import app, get_collection, get_client
 import mongomock
 
 # -------------------------------
@@ -11,6 +11,7 @@ mock_collection = mock_client["notesdb"]["notes"]
 
 # Override the FastAPI dependency to use the mock collection
 app.dependency_overrides[get_collection] = lambda: mock_collection
+app.dependency_overrides[get_client] = lambda: mock_client
 
 client = TestClient(app)
 
@@ -43,10 +44,29 @@ def test_update_note():
     response = client.put("/notes/test1", json={
         "id": "test1",
         "title": "Updated Note",
-        "content": "Updated content"
+        "content": "Updated content",
+        "pinned": False,
+        "is_private": True
     })
     assert response.status_code == 200
     assert response.json() == {"message": "Note updated successfully"}
+
+def test_pin_note():
+    response = client.put("/notes/test1/pin", json={"pinned": True})
+    assert response.status_code == 200
+    assert response.json() == {"message": "Note pinned successfully"}
+
+    get_response = client.get("/notes/test1")
+    assert get_response.status_code == 200
+    assert get_response.json()["pinned"] is True
+
+def test_note_stats():
+    response = client.get("/notes/stats")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_ids"] == 1
+    assert data["pinned_ids"] == 1
+    assert data["private_ids"] == 1
 
 def test_delete_note():
     response = client.delete("/notes/test1")
