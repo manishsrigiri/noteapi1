@@ -12,6 +12,15 @@ services:
     build: .
     container_name: fastapi
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID}
+      - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI:-http://localhost:8000/auth/github/callback}
+      - OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID}
+      - OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET}
+      - OAUTH_GOOGLE_REDIRECT_URI=${OAUTH_GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/google/callback}
+      - OAUTH_STREAMLIT_URL=${OAUTH_STREAMLIT_URL:-http://localhost:8501}
+      - AUTH_DISABLED=${AUTH_DISABLED:-false}
     ports:
       - "8000:8000"
     depends_on:
@@ -21,6 +30,10 @@ services:
     build: .
     container_name: streamlit
     command: streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    environment:
+      - API_BASE_URL=http://fastapi:8000
+      - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL:-http://localhost:8000}
+      - PUBLIC_STREAMLIT_URL=${PUBLIC_STREAMLIT_URL:-http://localhost:8501}
     ports:
       - "8501:8501"
     depends_on:
