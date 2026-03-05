@@ -1,6 +1,7 @@
 # app/main.py
 import os
 import secrets
+import hashlib
 from datetime import datetime, UTC
 from typing import List
 from urllib.parse import urlencode
@@ -39,6 +40,18 @@ class User(BaseModel):
     username: str
     display_name: str
     avatar_url: str | None = None
+    is_admin: bool = False
+
+
+class BasicLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class BasicRegisterRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str | None = None
 
 # -------------------------
 # MongoDB Dependency
@@ -56,6 +69,11 @@ def get_collection(client: MongoClient = Depends(get_client)):
 def get_session_collection(client: MongoClient = Depends(get_client)):
     db = client["notesdb"]
     return db["sessions"]
+
+
+def get_user_collection(client: MongoClient = Depends(get_client)):
+    db = client["notesdb"]
+    return db["users"]
 
 
 def _now_iso() -> str:
@@ -111,6 +129,23 @@ def _streamlit_public_url() -> str:
     return os.getenv("OAUTH_STREAMLIT_URL", "http://localhost:8501")
 
 
+def _basic_auth_username() -> str:
+    return os.getenv("BASIC_AUTH_USERNAME", "demo")
+
+
+def _basic_auth_password() -> str:
+    return os.getenv("BASIC_AUTH_PASSWORD", "demo123")
+
+
+def _admin_usernames() -> set[str]:
+    raw = os.getenv("ADMIN_USERNAMES", "demo")
+    return {name.strip().lower() for name in raw.split(",") if name.strip()}
+
+
+def _is_admin_username(username: str) -> bool:
+    return username.strip().lower() in _admin_usernames()
+
+
 def _create_session(user: User, session_collection) -> str:
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(UTC).timestamp() + 60 * 60 * 24
@@ -125,6 +160,11 @@ def _create_session(user: User, session_collection) -> str:
     return token
 
 
+def _hash_password(password: str, salt: bytes) -> str:
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 200000)
+    return derived.hex()
+
+
 def _read_session(token: str, session_collection) -> User | None:
     session = session_collection.find_one({"_id": token})
     if not session:
@@ -135,12 +175,21 @@ def _read_session(token: str, session_collection) -> User | None:
     return User(**session["user"])
 
 
+def _active_session_filter() -> dict:
+    return {"expires_at": {"$gt": datetime.now(UTC).timestamp()}}
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     session_collection=Depends(get_session_collection),
 ) -> User:
     if _auth_disabled():
-        return User(id="dev-user", username="dev-user", display_name="Dev User")
+        return User(
+            id="dev-user",
+            username="dev-user",
+            display_name="Dev User",
+            is_admin=True,
+        )
 
     if not credentials:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -211,6 +260,7 @@ def github_callback(
         username=profile.get("login", "github-user"),
         display_name=profile.get("name") or profile.get("login", "GitHub User"),
         avatar_url=profile.get("avatar_url"),
+        is_admin=_is_admin_username(profile.get("login", "")),
     )
     token = _create_session(user, session_collection)
 
@@ -287,6 +337,7 @@ def google_callback(
         username=username,
         display_name=profile.get("name", username or "Google User"),
         avatar_url=profile.get("picture"),
+        is_admin=_is_admin_username(username),
     )
     token = _create_session(user, session_collection)
 
@@ -300,6 +351,93 @@ def google_callback(
 @app.get("/auth/me", response_model=User)
 def auth_me(user: User = Depends(get_current_user)):
     return user
+
+
+@app.get("/auth/session-stats")
+def auth_session_stats(
+    user: User = Depends(get_current_user),
+    session_collection=Depends(get_session_collection),
+):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    active_sessions = list(session_collection.find(_active_session_filter(), {"user.username": 1}))
+    usernames = {s.get("user", {}).get("username", "") for s in active_sessions}
+    usernames.discard("")
+    return {
+        "active_sessions": len(active_sessions),
+        "logged_in_users": len(usernames),
+    }
+
+
+@app.post("/auth/basic/register")
+def basic_register(
+    register_request: BasicRegisterRequest,
+    user_collection=Depends(get_user_collection),
+):
+    username = register_request.username.strip().lower()
+    password = register_request.password
+    display_name = (register_request.display_name or username).strip()
+
+    if len(username) < 3:
+        raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if user_collection.find_one({"_id": username}):
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    salt = secrets.token_bytes(16)
+    password_hash = _hash_password(password, salt)
+    user_collection.insert_one(
+        {
+            "_id": username,
+            "display_name": display_name,
+            "password_hash": password_hash,
+            "salt": salt.hex(),
+            "created_at": _now_iso(),
+        }
+    )
+    return {"message": "Account created successfully"}
+
+
+@app.post("/auth/basic/login")
+def basic_login(
+    login_request: BasicLoginRequest,
+    session_collection=Depends(get_session_collection),
+    user_collection=Depends(get_user_collection),
+):
+    username = login_request.username.strip().lower()
+    password = login_request.password
+
+    valid_username = _basic_auth_username().strip().lower()
+    valid_password = _basic_auth_password()
+    if secrets.compare_digest(username, valid_username) and secrets.compare_digest(password, valid_password):
+        user = User(
+            id=f"basic-{username}",
+            username=username,
+            display_name=username,
+            is_admin=_is_admin_username(username),
+        )
+        token = _create_session(user, session_collection)
+        return {"auth_token": token, "user": user.model_dump()}
+
+    user_doc = user_collection.find_one({"_id": username})
+    if user_doc:
+        salt = bytes.fromhex(user_doc["salt"])
+        expected_hash = user_doc["password_hash"]
+        provided_hash = _hash_password(password, salt)
+        if not secrets.compare_digest(provided_hash, expected_hash):
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+        user = User(
+            id=f"basic-{username}",
+            username=username,
+            display_name=user_doc.get("display_name", username),
+            is_admin=_is_admin_username(username),
+        )
+    else:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = _create_session(user, session_collection)
+    return {"auth_token": token, "user": user.model_dump()}
 
 
 @app.post("/auth/logout")

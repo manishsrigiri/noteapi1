@@ -160,15 +160,81 @@ def sort_notes(notes: list[dict], mode: str) -> list[dict]:
     return sorted(notes, key=lambda n: safe_text(n.get("updated_at")), reverse=True)
 
 
+def render_login_page(auth_error: str | None = None) -> None:
+    encoded_next = quote_plus(PUBLIC_STREAMLIT_URL)
+    login_github_url = f"{PUBLIC_API_BASE_URL}/auth/github/login?next_url={encoded_next}"
+    login_google_url = f"{PUBLIC_API_BASE_URL}/auth/google/login?next_url={encoded_next}"
+
+    st.title("NoteAPI Studio")
+    st.caption("Secure sign-in required before accessing your workspace.")
+    if auth_error:
+        st.error(f"Login session error: {auth_error}")
+
+    col1, col2, col3 = st.columns([1, 1.8, 1])
+    with col2:
+        st.markdown("### Login")
+        st.write("Login with username/password or create a new account.")
+
+        login_tab, signup_tab = st.tabs(["Login", "Sign Up"])
+        with login_tab:
+            with st.form("basic_login_form"):
+                username = st.text_input("Username")
+                password = st.text_input("Password", type="password")
+                login_submit = st.form_submit_button("Login")
+
+            if login_submit:
+                payload = {"username": username.strip(), "password": password}
+                result, error = auth_request("POST", "/auth/basic/login", payload=payload)
+                if error:
+                    st.error(error)
+                else:
+                    st.session_state["auth_token"] = result.get("auth_token")
+                    st.session_state["user"] = result.get("user", {})
+                    rerun()
+
+        with signup_tab:
+            with st.form("basic_signup_form"):
+                new_username = st.text_input("New username")
+                new_display_name = st.text_input("Display name (optional)")
+                new_password = st.text_input("New password", type="password")
+                confirm_password = st.text_input("Confirm password", type="password")
+                signup_submit = st.form_submit_button("Create Account")
+
+            if signup_submit:
+                if new_password != confirm_password:
+                    st.error("Passwords do not match")
+                else:
+                    payload = {
+                        "username": new_username.strip(),
+                        "password": new_password,
+                        "display_name": new_display_name.strip() or None,
+                    }
+                    _, error = auth_request("POST", "/auth/basic/register", payload=payload)
+                    if error:
+                        st.error(error)
+                    else:
+                        st.success("Account created. Please login with your new credentials.")
+
+        st.divider()
+        st.write("Or continue with OAuth:")
+        st.link_button("Continue with GitHub", login_github_url, use_container_width=True)
+        st.link_button("Continue with Google", login_google_url, use_container_width=True)
+        st.info(
+            "You can sign up in this page. `.env` BASIC_AUTH_USERNAME/BASIC_AUTH_PASSWORD still work as fallback."
+        )
+
+
 query_params = st.query_params
 if "auth_token" in query_params and query_params["auth_token"]:
     st.session_state["auth_token"] = query_params["auth_token"]
     st.query_params.clear()
     rerun()
 
+auth_error_message = None
 if "auth_token" in st.session_state and "user" not in st.session_state:
     me, me_error = auth_request("GET", "/auth/me")
     if me_error:
+        auth_error_message = me_error
         st.session_state.pop("auth_token", None)
     else:
         st.session_state["user"] = me
@@ -178,14 +244,7 @@ apply_theme(theme)
 st.sidebar.title("Control Room")
 
 if "user" not in st.session_state:
-    st.title("NoteAPI Studio")
-    st.subheader("Sign in required")
-    st.write("Use OAuth to access your notes securely.")
-    encoded_next = quote_plus(PUBLIC_STREAMLIT_URL)
-    login_github_url = f"{PUBLIC_API_BASE_URL}/auth/github/login?next_url={encoded_next}"
-    login_google_url = f"{PUBLIC_API_BASE_URL}/auth/google/login?next_url={encoded_next}"
-    st.link_button("Login with GitHub", login_github_url, use_container_width=True)
-    st.link_button("Login with Google", login_google_url, use_container_width=True)
+    render_login_page(auth_error_message)
     st.stop()
 
 st.sidebar.success(f"Signed in as {st.session_state['user'].get('username', 'user')}")
@@ -194,6 +253,12 @@ if st.sidebar.button("Logout"):
     st.session_state.pop("auth_token", None)
     st.session_state.pop("user", None)
     rerun()
+
+if st.session_state["user"].get("is_admin", False):
+    session_stats, session_stats_error = auth_request("GET", "/auth/session-stats")
+    if session_stats and not session_stats_error:
+        st.sidebar.metric("Logged-in Users", session_stats.get("logged_in_users", 0))
+        st.sidebar.metric("Active Sessions", session_stats.get("active_sessions", 0))
 
 stats, stats_error = api_request("GET", "stats")
 notes, notes_error = api_request("GET")

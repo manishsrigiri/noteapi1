@@ -1,5 +1,30 @@
 # noteapi
 
+## Basic login (no OAuth)
+
+You can log in without OAuth using the built-in username/password flow.
+
+1. Open `http://localhost:8501`.
+2. In login page, use `Sign Up` tab to create a new account.
+3. Login with your created username/password.
+
+Fallback mode:
+- You can still set `.env`:
+  - `BASIC_AUTH_USERNAME`
+  - `BASIC_AUTH_PASSWORD`
+  - `ADMIN_USERNAMES` (comma-separated usernames allowed to view login/session stats)
+- These fallback credentials continue to work if no matching DB user exists.
+4. Restart:
+   - `docker compose up -d --build`
+
+Default credentials in `.env.example`:
+- Username: `demo`
+- Password: `demo123`
+
+Privacy note:
+- Login/session stats are visible only to admin users listed in `ADMIN_USERNAMES`.
+- App does not display login location/IP in UI.
+
 ## GitHub OAuth setup
 
 1. Create a GitHub OAuth App:
