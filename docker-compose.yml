@@ -9,9 +9,11 @@ services:
       - mongo_data:/data/db
 
   fastapi:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.fastapi
+    image: noteapi-fastapi
     container_name: fastapi
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID}
       - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET}
@@ -30,9 +32,11 @@ services:
       - mongo
 
   streamlit:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    image: noteapi-streamlit
     container_name: streamlit
-    command: streamlit run app/streamlit_app.py --server.port=8501 --server.address=0.0.0.0
     environment:
       - API_BASE_URL=http://fastapi:8000
       - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL:-http://localhost:8000}
