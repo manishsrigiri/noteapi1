@@ -4,7 +4,8 @@ import os
 os.environ["AUTH_DISABLED"] = "true"
 
 from fastapi.testclient import TestClient
-from app.main import app, get_collection, get_client
+from app.main import app
+from app.database.mongodb import get_collection, get_client
 import mongomock
 
 # -------------------------------

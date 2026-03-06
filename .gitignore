@@ -2,4 +2,4 @@ myenv/
 __pycache__/
 *.pyc
 .env
-mongo_data/
+mongo_data/ 
