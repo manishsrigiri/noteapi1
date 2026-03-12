@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime
 from urllib.parse import quote_plus
 
 import requests
@@ -160,10 +161,32 @@ def sort_notes(notes: list[dict], mode: str) -> list[dict]:
     return sorted(notes, key=lambda n: safe_text(n.get("updated_at")), reverse=True)
 
 
+def _format_duration(seconds: int | None) -> str:
+    if seconds is None:
+        return "-"
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def _format_timestamp(value: str | None) -> str:
+    if not value:
+        return "unknown"
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%b %d, %Y %I:%M %p")
+    except ValueError:
+        return value
+
+
 def render_login_page(auth_error: str | None = None) -> None:
     encoded_next = quote_plus(PUBLIC_STREAMLIT_URL)
-    login_github_url = f"{PUBLIC_API_BASE_URL}/auth/github/login?next_url={encoded_next}"
-    login_google_url = f"{PUBLIC_API_BASE_URL}/auth/google/login?next_url={encoded_next}"
+    login_google_workspace_url = (
+        f"{PUBLIC_API_BASE_URL}/auth/google-workspace/login?next_url={encoded_next}"
+    )
 
     st.title("NoteAPI Studio")
     st.caption("Secure sign-in required before accessing your workspace.")
@@ -216,9 +239,12 @@ def render_login_page(auth_error: str | None = None) -> None:
                         st.success("Account created. Please login with your new credentials.")
 
         st.divider()
-        st.write("Or continue with OAuth:")
-        st.link_button("Continue with GitHub", login_github_url, use_container_width=True)
-        st.link_button("Continue with Google", login_google_url, use_container_width=True)
+        st.write("Or continue with login:")
+        st.link_button(
+            "Continue with Google Workspace",
+            login_google_workspace_url,
+            use_container_width=True,
+        )
         st.info(
             "You can sign up in this page. `.env` BASIC_AUTH_USERNAME/BASIC_AUTH_PASSWORD still work as fallback."
         )
@@ -239,7 +265,7 @@ if "auth_token" in st.session_state and "user" not in st.session_state:
     else:
         st.session_state["user"] = me
 
-theme = st.sidebar.selectbox("Theme", list(THEMES.keys()))
+theme = st.sidebar.selectbox("Theme", list(THEMES.keys()), index=1)
 apply_theme(theme)
 st.sidebar.title("Control Room")
 
@@ -247,18 +273,85 @@ if "user" not in st.session_state:
     render_login_page(auth_error_message)
     st.stop()
 
+user_role = st.session_state["user"].get("role", "viewer")
+can_edit = st.session_state["user"].get("is_admin", False) or user_role in {"editor", "admin"}
+
 st.sidebar.success(f"Signed in as {st.session_state['user'].get('username', 'user')}")
 if st.sidebar.button("Logout"):
     auth_request("POST", "/auth/logout")
     st.session_state.pop("auth_token", None)
     st.session_state.pop("user", None)
-    rerun()
+    st.warning("You have been logged out.")
+    st.stop()
 
 if st.session_state["user"].get("is_admin", False):
     session_stats, session_stats_error = auth_request("GET", "/auth/session-stats")
     if session_stats and not session_stats_error:
         st.sidebar.metric("Logged-in Users", session_stats.get("logged_in_users", 0))
         st.sidebar.metric("Active Sessions", session_stats.get("active_sessions", 0))
+
+    with st.sidebar.expander("Session Details", expanded=False):
+        sessions_payload, sessions_error = auth_request("GET", "/auth/sessions?include_inactive=true")
+        if sessions_error:
+            st.error(sessions_error)
+        else:
+            sessions = sessions_payload.get("sessions", [])
+            for session in sessions:
+                session["duration"] = _format_duration(session.get("duration_seconds"))
+            search_user = st.text_input("Search user activity")
+            if search_user.strip():
+                needle = search_user.strip().lower()
+                sessions = [s for s in sessions if needle in s.get("username", "").lower()]
+            session_rows = [
+                {
+                    "logout": False,
+                    "token": s.get("token", ""),
+                    "username": s.get("username", ""),
+                    "active": s.get("is_active", False),
+                    "login_at": s.get("created_at", ""),
+                    "last_seen": s.get("last_seen", ""),
+                    "logout_at": s.get("logged_out_at", ""),
+                    "duration": s.get("duration", ""),
+                }
+                for s in sessions
+            ]
+            edited = st.data_editor(
+                session_rows,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "logout": st.column_config.CheckboxColumn("Logout"),
+                    "token": st.column_config.TextColumn("Token"),
+                },
+                disabled=[
+                    "token",
+                    "username",
+                    "active",
+                    "login_at",
+                    "last_seen",
+                    "logout_at",
+                    "duration",
+                ],
+            )
+
+            logout_tokens = [row["token"] for row in edited if row.get("logout") and row.get("token")]
+            if st.button("Logout Selected"):
+                if not logout_tokens:
+                    st.info("Select at least one session to logout.")
+                else:
+                    total_updated = 0
+                    for token in logout_tokens:
+                        result, error = auth_request(
+                            "POST",
+                            "/auth/sessions/logout",
+                            payload={"token": token},
+                        )
+                        if error:
+                            st.error(f"{token}: {error}")
+                        else:
+                            total_updated += result.get("updated", 0)
+                    st.success(f"Logged out sessions: {total_updated}")
+                    rerun()
 
 stats, stats_error = api_request("GET", "stats")
 notes, notes_error = api_request("GET")
@@ -282,9 +375,19 @@ st.caption("Presentation-ready notes dashboard with privacy controls, pinning, a
 if notes_error:
     st.error(notes_error)
 
-tabs = st.tabs(["Dashboard", "Create", "Library", "Manage"])
+tab_labels = ["Dashboard"]
+if can_edit:
+    tab_labels.append("Create")
+tab_labels.append("Library")
+tab_labels.append("Requests")
+if can_edit:
+    tab_labels.append("Manage")
+if st.session_state["user"].get("is_admin", False):
+    tab_labels.append("Admin")
+tabs = st.tabs(tab_labels)
+tab_map = dict(zip(tab_labels, tabs))
 
-with tabs[0]:
+with tab_map["Dashboard"]:
     st.subheader("Live Overview")
     total = len(notes)
     pinned = sum(1 for note in notes if note.get("pinned"))
@@ -312,39 +415,40 @@ with tabs[0]:
         mime="application/json",
     )
 
-with tabs[1]:
-    st.subheader("Create a New Note")
-    with st.form("create_note_form"):
-        col1, col2 = st.columns(2)
-        note_id = col1.text_input("Note ID")
-        title = col2.text_input("Title")
-        col3, col4 = st.columns(2)
-        category = col3.text_input("Category", value="General")
-        tags_raw = col4.text_input("Tags (comma separated)")
-        content = st.text_area("Content", height=180)
-        c1, c2 = st.columns(2)
-        pinned = c1.checkbox("Pin this note")
-        is_private = c2.checkbox("Mark as private")
-        submitted = st.form_submit_button("Create Note")
+if "Create" in tab_map:
+    with tab_map["Create"]:
+        st.subheader("Create a New Note")
+        with st.form("create_note_form"):
+            col1, col2 = st.columns(2)
+            note_id = col1.text_input("Note ID")
+            title = col2.text_input("Title")
+            col3, col4 = st.columns(2)
+            category = col3.text_input("Category", value="General")
+            tags_raw = col4.text_input("Tags (comma separated)")
+            content = st.text_area("Content", height=180)
+            c1, c2 = st.columns(2)
+            pinned = c1.checkbox("Pin this note")
+            is_private = c2.checkbox("Mark as private")
+            submitted = st.form_submit_button("Create Note")
 
-    if submitted:
-        payload = {
-            "id": note_id.strip(),
-            "title": title.strip(),
-            "content": content.strip(),
-            "pinned": pinned,
-            "is_private": is_private,
-            "category": category.strip() or "General",
-            "tags": parse_tags(tags_raw),
-        }
-        result, err = api_request("POST", "", payload=payload)
-        if err:
-            st.error(err)
-        else:
-            st.success(result.get("message", "Note created"))
-            rerun()
+        if submitted:
+            payload = {
+                "id": note_id.strip(),
+                "title": title.strip(),
+                "content": content.strip(),
+                "pinned": pinned,
+                "is_private": is_private,
+                "category": category.strip() or "General",
+                "tags": parse_tags(tags_raw),
+            }
+            result, err = api_request("POST", "", payload=payload)
+            if err:
+                st.error(err)
+            else:
+                st.success(result.get("message", "Note created"))
+                rerun()
 
-with tabs[2]:
+with tab_map["Library"]:
     st.subheader("Notes Library")
     c1, c2, c3, c4 = st.columns(4)
     search_text = c1.text_input("Search")
@@ -381,12 +485,14 @@ with tabs[2]:
         pin_label = "PINNED" if note.get("pinned") else "UNPINNED"
         tags = ", ".join(note.get("tags", [])) or "None"
         content_preview = format_content(note, reveal_private=show_private_content)
+        created_at = _format_timestamp(note.get("created_at"))
         st.markdown(
             f"""
             <div class="note-card">
                 <h4>{note.get("title", "")}</h4>
                 <p class="meta-text">ID: {note.get("id", "")} | {pin_label} | {visibility_label}</p>
                 <p class="meta-text">Category: {note.get("category", "General")} | Tags: {tags}</p>
+                <p class="meta-text">Created: {created_at}</p>
                 <p>{content_preview}</p>
             </div>
             """,
@@ -395,13 +501,21 @@ with tabs[2]:
         b1, b2 = st.columns(2)
         toggle_pin = not note.get("pinned", False)
         pin_text = "Pin" if toggle_pin else "Unpin"
-        if b1.button(f"{pin_text} {note.get('id')}", key=f"pin_{note.get('id')}"):
+        if b1.button(
+            f"{pin_text} {note.get('id')}",
+            key=f"pin_{note.get('id')}",
+            disabled=not can_edit,
+        ):
             _, err = api_request("PUT", f"{note.get('id')}/pin", payload={"pinned": toggle_pin})
             if err:
                 st.error(err)
             else:
                 rerun()
-        if b2.button(f"Delete {note.get('id')}", key=f"delete_{note.get('id')}"):
+        if b2.button(
+            f"Delete {note.get('id')}",
+            key=f"delete_{note.get('id')}",
+            disabled=not can_edit,
+        ):
             _, err = api_request("DELETE", note.get("id"))
             if err:
                 st.error(err)
@@ -409,39 +523,283 @@ with tabs[2]:
                 st.success("Note deleted")
                 rerun()
 
-with tabs[3]:
-    st.subheader("Update Existing Note")
-    ids = [note.get("id", "") for note in notes]
-    if not ids:
-        st.info("No notes available. Create one first.")
-    else:
-        selected_id = st.selectbox("Select Note ID", ids)
-        selected = next((note for note in notes if note.get("id") == selected_id), None)
-        if selected:
-            with st.form("update_note_form"):
-                u_title = st.text_input("Title", value=selected.get("title", ""))
-                u_content = st.text_area("Content", value=selected.get("content", ""), height=180)
-                col1, col2 = st.columns(2)
-                u_category = col1.text_input("Category", value=selected.get("category", "General"))
-                u_tags = col2.text_input("Tags (comma separated)", value=", ".join(selected.get("tags", [])))
-                col3, col4 = st.columns(2)
-                u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
-                u_private = col4.checkbox("Private", value=selected.get("is_private", False))
-                submitted = st.form_submit_button("Update Note")
+if "Manage" in tab_map:
+    with tab_map["Manage"]:
+        st.subheader("Update Existing Note")
+        ids = [note.get("id", "") for note in notes]
+        if not ids:
+            st.info("No notes available. Create one first.")
+        else:
+            selected_id = st.selectbox("Select Note ID", ids)
+            selected = next((note for note in notes if note.get("id") == selected_id), None)
+            if selected:
+                with st.form("update_note_form"):
+                    u_title = st.text_input("Title", value=selected.get("title", ""))
+                    u_content = st.text_area("Content", value=selected.get("content", ""), height=180)
+                    col1, col2 = st.columns(2)
+                    u_category = col1.text_input("Category", value=selected.get("category", "General"))
+                    u_tags = col2.text_input("Tags (comma separated)", value=", ".join(selected.get("tags", [])))
+                    col3, col4 = st.columns(2)
+                    u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
+                    u_private = col4.checkbox("Private", value=selected.get("is_private", False))
+                    submitted = st.form_submit_button("Update Note")
 
-            if submitted:
-                payload = {
-                    "id": selected_id,
-                    "title": u_title.strip(),
-                    "content": u_content.strip(),
-                    "pinned": u_pinned,
-                    "is_private": u_private,
-                    "category": u_category.strip() or "General",
-                    "tags": parse_tags(u_tags),
-                }
-                result, err = api_request("PUT", selected_id, payload=payload)
-                if err:
-                    st.error(err)
+                if submitted:
+                    payload = {
+                        "id": selected_id,
+                        "title": u_title.strip(),
+                        "content": u_content.strip(),
+                        "pinned": u_pinned,
+                        "is_private": u_private,
+                        "category": u_category.strip() or "General",
+                        "tags": parse_tags(u_tags),
+                    }
+                    result, err = api_request("PUT", selected_id, payload=payload)
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(result.get("message", "Note updated"))
+                        rerun()
+
+with tab_map["Requests"]:
+    st.subheader("Request Changes")
+    action = st.selectbox("Action", ["Create", "Update", "Delete", "Pin/Unpin"])
+    reason = st.text_input("Reason for change")
+
+    if action == "Create":
+        with st.form("request_create_note"):
+            col1, col2 = st.columns(2)
+            note_id = col1.text_input("Note ID")
+            title = col2.text_input("Title")
+            col3, col4 = st.columns(2)
+            category = col3.text_input("Category", value="General")
+            tags_raw = col4.text_input("Tags (comma separated)")
+            content = st.text_area("Content", height=180)
+            c1, c2 = st.columns(2)
+            pinned = c1.checkbox("Pin this note")
+            is_private = c2.checkbox("Mark as private")
+            submit_request = st.form_submit_button("Submit Create Request")
+        if submit_request:
+            payload = {
+                "id": note_id.strip(),
+                "title": title.strip(),
+                "content": content.strip(),
+                "pinned": pinned,
+                "is_private": is_private,
+                "category": category.strip() or "General",
+                "tags": parse_tags(tags_raw),
+            }
+            result, err = auth_request(
+                "POST",
+                "/notes/requests",
+                payload={"action": "create", "payload": payload, "reason": reason.strip() or None},
+            )
+            if err:
+                st.error(err)
+            else:
+                st.success(result.get("message", "Request submitted"))
+                rerun()
+
+    if action in {"Update", "Delete", "Pin/Unpin"}:
+        if not notes:
+            st.info("No notes available.")
+        else:
+            note_ids = [note.get("id", "") for note in notes]
+            selected_id = st.selectbox("Select Note ID", note_ids, key=f"request_{action}_id")
+            selected = next((note for note in notes if note.get("id") == selected_id), None)
+
+            if action == "Update" and selected:
+                with st.form("request_update_note"):
+                    u_title = st.text_input("Title", value=selected.get("title", ""))
+                    u_content = st.text_area("Content", value=selected.get("content", ""), height=180)
+                    col1, col2 = st.columns(2)
+                    u_category = col1.text_input("Category", value=selected.get("category", "General"))
+                    u_tags = col2.text_input(
+                        "Tags (comma separated)",
+                        value=", ".join(selected.get("tags", [])),
+                    )
+                    col3, col4 = st.columns(2)
+                    u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
+                    u_private = col4.checkbox("Private", value=selected.get("is_private", False))
+                    submit_update = st.form_submit_button("Submit Update Request")
+                if submit_update:
+                    payload = {
+                        "id": selected_id,
+                        "title": u_title.strip(),
+                        "content": u_content.strip(),
+                        "pinned": u_pinned,
+                        "is_private": u_private,
+                        "category": u_category.strip() or "General",
+                        "tags": parse_tags(u_tags),
+                    }
+                    result, err = auth_request(
+                        "POST",
+                        "/notes/requests",
+                        payload={
+                            "action": "update",
+                            "note_id": selected_id,
+                            "payload": payload,
+                            "reason": reason.strip() or None,
+                        },
+                    )
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(result.get("message", "Request submitted"))
+                        rerun()
+
+            if action == "Delete" and selected:
+                if st.button("Submit Delete Request"):
+                    result, err = auth_request(
+                        "POST",
+                        "/notes/requests",
+                        payload={
+                            "action": "delete",
+                            "note_id": selected_id,
+                            "reason": reason.strip() or None,
+                        },
+                    )
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(result.get("message", "Request submitted"))
+                        rerun()
+
+            if action == "Pin/Unpin" and selected:
+                toggle_pin = not selected.get("pinned", False)
+                if st.button("Submit Pin/Unpin Request"):
+                    result, err = auth_request(
+                        "POST",
+                        "/notes/requests",
+                        payload={
+                            "action": "pin",
+                            "note_id": selected_id,
+                            "payload": {"pinned": toggle_pin},
+                            "reason": reason.strip() or None,
+                        },
+                    )
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(result.get("message", "Request submitted"))
+                        rerun()
+
+if "Admin" in tab_map:
+    with tab_map["Admin"]:
+        st.subheader("All Notes (Admin)")
+        if notes_error:
+            st.error(notes_error)
+        else:
+            st.download_button(
+                label="Export Notes (JSON)",
+                data=json.dumps(notes, indent=2),
+                file_name="notes_admin_export.json",
+                mime="application/json",
+            )
+            st.dataframe(notes, use_container_width=True)
+
+        st.subheader("User Directory")
+        users_payload, users_error = auth_request("GET", "/auth/admin/users")
+        if users_error:
+            st.error(users_error)
+        else:
+            users = users_payload.get("users", [])
+            st.download_button(
+                label="Export Users (JSON)",
+                data=json.dumps(users, indent=2),
+                file_name="users_admin_export.json",
+                mime="application/json",
+            )
+            st.dataframe(users, use_container_width=True)
+
+            with st.form("admin_update_user"):
+                target_username = st.selectbox("User", [u.get("username", "") for u in users])
+                new_display_name = st.text_input("New display name")
+                new_role = st.selectbox("New role", ["", "viewer", "editor", "admin"])
+                update_submit = st.form_submit_button("Update User")
+            if update_submit:
+                payload = {}
+                if new_display_name.strip():
+                    payload["display_name"] = new_display_name.strip()
+                if new_role:
+                    payload["role"] = new_role
+                result, error = auth_request(
+                    "PATCH",
+                    f"/auth/admin/users/{target_username}",
+                    payload=payload,
+                )
+                if error:
+                    st.error(error)
                 else:
-                    st.success(result.get("message", "Note updated"))
+                    st.success(result.get("message", "User updated"))
                     rerun()
+
+            st.markdown("### Admin Actions")
+            with st.form("admin_reset_password"):
+                reset_username = st.selectbox("Reset password for", [u.get("username", "") for u in users])
+                reset_password = st.text_input("New password", type="password")
+                reset_submit = st.form_submit_button("Reset Password")
+            if reset_submit:
+                result, error = auth_request(
+                    "POST",
+                    f"/auth/admin/users/{reset_username}/reset-password",
+                    payload={"password": reset_password},
+                )
+                if error:
+                    st.error(error)
+                else:
+                    st.success(result.get("message", "Password reset"))
+                    rerun()
+
+            with st.form("admin_delete_user"):
+                delete_username = st.selectbox("Delete user", [u.get("username", "") for u in users])
+                delete_submit = st.form_submit_button("Delete User")
+            if delete_submit:
+                result, error = auth_request(
+                    "DELETE",
+                    f"/auth/admin/users/{delete_username}",
+                )
+                if error:
+                    st.error(error)
+                else:
+                    st.success(result.get("message", "User deleted"))
+                    rerun()
+
+        st.subheader("Change Requests")
+        requests_payload, requests_error = auth_request("GET", "/notes/requests?status=pending")
+        if requests_error:
+            st.error(requests_error)
+        else:
+            pending_requests = requests_payload.get("requests", [])
+            st.dataframe(pending_requests, use_container_width=True)
+
+            request_ids = [r.get("_id", "") for r in pending_requests if r.get("_id")]
+            if request_ids:
+                with st.form("admin_resolve_request"):
+                    selected_request = st.selectbox("Request ID", request_ids)
+                    decline_reason = st.text_input("Decline reason (optional)")
+                    approve = st.form_submit_button("Approve")
+                    decline = st.form_submit_button("Decline")
+                if approve:
+                    result, error = auth_request(
+                        "POST",
+                        f"/notes/requests/{selected_request}/approve",
+                    )
+                    if error:
+                        st.error(error)
+                    else:
+                        st.success(result.get("message", "Request approved"))
+                        rerun()
+                if decline:
+                    result, error = auth_request(
+                        "POST",
+                        f"/notes/requests/{selected_request}/decline",
+                        payload={"reason": decline_reason.strip() or None},
+                    )
+                    if error:
+                        st.error(error)
+                    else:
+                        st.success(result.get("message", "Request declined"))
+                        rerun()
+            else:
+                st.info("No pending requests.")

@@ -22,3 +22,8 @@ def get_session_collection(client: MongoClient = Depends(get_client)):
 def get_user_collection(client: MongoClient = Depends(get_client)):
     db = client["notesdb"]
     return db["users"]
+
+
+def get_request_collection(client: MongoClient = Depends(get_client)):
+    db = client["notesdb"]
+    return db["note_requests"]

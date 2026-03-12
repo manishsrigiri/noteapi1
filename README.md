@@ -50,6 +50,20 @@ Privacy note:
    - `docker compose up -d --build`
 5. Open `http://localhost:8501` and click `Login with Google`.
 
+## Google Workspace (Corporate) OAuth setup
+
+1. Create a Google OAuth Client (Web application) in Google Cloud Console.
+2. Set:
+   - Authorized JavaScript origin: `http://localhost:8501`
+   - Authorized redirect URI: `http://localhost:8000/auth/google-workspace/callback`
+3. Add to `.env`:
+   - `OAUTH_GOOGLE_WORKSPACE_CLIENT_ID`
+   - `OAUTH_GOOGLE_WORKSPACE_CLIENT_SECRET`
+   - `OAUTH_GOOGLE_WORKSPACE_DOMAIN` (your workspace domain, e.g. `yourcompany.com`)
+4. Restart:
+   - `docker compose up -d --build`
+5. Open `http://localhost:8501` and click `Continue with Google Workspace`.
+
 ### Dev/testing mode without OAuth
 
 Set `AUTH_DISABLED=true` in `.env` to bypass authentication locally.

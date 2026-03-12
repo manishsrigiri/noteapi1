@@ -23,7 +23,10 @@ def normalize_note(note: dict) -> Note:
 
 
 def active_session_filter() -> dict:
-    return {"expires_at": {"$gt": datetime.now(UTC).timestamp()}}
+    return {
+        "expires_at": {"$gt": datetime.now(UTC).timestamp()},
+        "$or": [{"logged_out_at": {"$exists": False}}, {"logged_out_at": None}],
+    }
 
 
 def auth_disabled() -> bool:
@@ -55,6 +58,26 @@ def google_oauth_redirect_uri() -> str:
         "OAUTH_GOOGLE_REDIRECT_URI",
         "http://localhost:8000/auth/google/callback",
     )
+
+
+def google_workspace_client_id() -> str:
+    return os.getenv("OAUTH_GOOGLE_WORKSPACE_CLIENT_ID", "")
+
+
+def google_workspace_client_secret() -> str:
+    return os.getenv("OAUTH_GOOGLE_WORKSPACE_CLIENT_SECRET", "")
+
+
+def google_workspace_redirect_uri() -> str:
+    return os.getenv(
+        "OAUTH_GOOGLE_WORKSPACE_REDIRECT_URI",
+        "http://localhost:8000/auth/google-workspace/callback",
+    )
+
+
+def google_workspace_domains() -> set[str]:
+    raw = os.getenv("OAUTH_GOOGLE_WORKSPACE_DOMAIN", "")
+    return {name.strip().lower() for name in raw.split(",") if name.strip()}
 
 
 def streamlit_public_url() -> str:
