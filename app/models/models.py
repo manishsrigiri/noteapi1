@@ -3,6 +3,12 @@ from typing import Any, List
 from pydantic import BaseModel, Field
 
 
+class Attachment(BaseModel):
+    filename: str
+    content_type: str
+    data_b64: str
+
+
 class Note(BaseModel):
     id: str
     title: str
@@ -11,6 +17,7 @@ class Note(BaseModel):
     is_private: bool = False
     category: str = "General"
     tags: List[str] = Field(default_factory=list)
+    attachments: List[Attachment] = Field(default_factory=list)
     created_at: str | None = None
     updated_at: str | None = None
 

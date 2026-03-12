@@ -17,6 +17,7 @@ def normalize_note(note: dict) -> Note:
         is_private=note.get("is_private", False),
         category=note.get("category", "General"),
         tags=note.get("tags", []),
+        attachments=note.get("attachments", []),
         created_at=note.get("created_at"),
         updated_at=note.get("updated_at"),
     )

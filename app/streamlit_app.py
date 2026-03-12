@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 from datetime import datetime
@@ -180,6 +181,19 @@ def _format_timestamp(value: str | None) -> str:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%b %d, %Y %I:%M %p")
     except ValueError:
         return value
+
+
+def _encode_attachments(files) -> list[dict]:
+    attachments = []
+    for f in files or []:
+        attachments.append(
+            {
+                "filename": f.name,
+                "content_type": f.type or "application/octet-stream",
+                "data_b64": base64.b64encode(f.getvalue()).decode("utf-8"),
+            }
+        )
+    return attachments
 
 
 def render_login_page(auth_error: str | None = None) -> None:
@@ -370,6 +384,8 @@ else:
     st.sidebar.warning(stats_error or "Could not load stats")
 
 st.title("NoteAPI Studio")
+role_label = "Admin" if st.session_state["user"].get("is_admin", False) else user_role.title()
+st.caption(f"Role: {role_label}")
 st.caption("Presentation-ready notes dashboard with privacy controls, pinning, and analytics.")
 
 if notes_error:
@@ -426,6 +442,7 @@ if "Create" in tab_map:
             category = col3.text_input("Category", value="General")
             tags_raw = col4.text_input("Tags (comma separated)")
             content = st.text_area("Content", height=180)
+            attachments = st.file_uploader("Attachments", accept_multiple_files=True)
             c1, c2 = st.columns(2)
             pinned = c1.checkbox("Pin this note")
             is_private = c2.checkbox("Mark as private")
@@ -440,6 +457,7 @@ if "Create" in tab_map:
                 "is_private": is_private,
                 "category": category.strip() or "General",
                 "tags": parse_tags(tags_raw),
+                "attachments": _encode_attachments(attachments),
             }
             result, err = api_request("POST", "", payload=payload)
             if err:
@@ -498,6 +516,25 @@ with tab_map["Library"]:
             """,
             unsafe_allow_html=True,
         )
+        attachments = note.get("attachments", [])
+        if attachments:
+            with st.expander("Attachments"):
+                for attachment in attachments:
+                    filename = attachment.get("filename", "attachment")
+                    content_type = attachment.get("content_type", "application/octet-stream")
+                    data_b64 = attachment.get("data_b64", "")
+                    try:
+                        data = base64.b64decode(data_b64)
+                    except (ValueError, TypeError):
+                        data = b""
+                    if content_type.startswith("image/") and data:
+                        st.image(data, caption=filename)
+                    st.download_button(
+                        label=f"Download {filename}",
+                        data=data,
+                        file_name=filename,
+                        mime=content_type,
+                    )
         b1, b2 = st.columns(2)
         toggle_pin = not note.get("pinned", False)
         pin_text = "Pin" if toggle_pin else "Unpin"
@@ -539,12 +576,22 @@ if "Manage" in tab_map:
                     col1, col2 = st.columns(2)
                     u_category = col1.text_input("Category", value=selected.get("category", "General"))
                     u_tags = col2.text_input("Tags (comma separated)", value=", ".join(selected.get("tags", [])))
+                    keep_attachments = st.checkbox("Keep existing attachments", value=True)
+                    new_attachments = st.file_uploader(
+                        "Add attachments",
+                        accept_multiple_files=True,
+                        key="update_attachments",
+                    )
                     col3, col4 = st.columns(2)
                     u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
                     u_private = col4.checkbox("Private", value=selected.get("is_private", False))
                     submitted = st.form_submit_button("Update Note")
 
                 if submitted:
+                    attachments_payload = []
+                    if keep_attachments:
+                        attachments_payload.extend(selected.get("attachments", []))
+                    attachments_payload.extend(_encode_attachments(new_attachments))
                     payload = {
                         "id": selected_id,
                         "title": u_title.strip(),
@@ -553,6 +600,7 @@ if "Manage" in tab_map:
                         "is_private": u_private,
                         "category": u_category.strip() or "General",
                         "tags": parse_tags(u_tags),
+                        "attachments": attachments_payload,
                     }
                     result, err = api_request("PUT", selected_id, payload=payload)
                     if err:
@@ -764,6 +812,27 @@ if "Admin" in tab_map:
                 else:
                     st.success(result.get("message", "User deleted"))
                     rerun()
+
+        with st.form("admin_create_user_main"):
+            st.subheader("Create User")
+            new_username = st.text_input("Username")
+            new_display_name = st.text_input("Display name")
+            new_password = st.text_input("Password", type="password")
+            new_role = st.selectbox("Role", ["viewer", "editor", "admin"])
+            create_submit = st.form_submit_button("Create User")
+        if create_submit:
+            payload = {
+                "username": new_username.strip(),
+                "password": new_password,
+                "display_name": new_display_name.strip() or None,
+                "role": new_role,
+            }
+            result, error = auth_request("POST", "/auth/admin/users", payload=payload)
+            if error:
+                st.error(error)
+            else:
+                st.success(result.get("message", "User created"))
+                rerun()
 
         st.subheader("Change Requests")
         requests_payload, requests_error = auth_request("GET", "/notes/requests?status=pending")
