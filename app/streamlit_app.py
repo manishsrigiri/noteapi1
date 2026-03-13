@@ -601,11 +601,11 @@ if hide_sidebar:
     st.markdown(
         f"""
         <script>
-            window.addEventListener('keydown', function(e) {
-                if (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b')) {
+            window.addEventListener('keydown', function(e) {{
+                if (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b')) {{
                     window.location.assign('{show_sidebar_url}');
-                }
-            });
+                }}
+            }});
         </script>
         """,
         unsafe_allow_html=True,
