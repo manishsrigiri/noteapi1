@@ -572,7 +572,7 @@ if presentation_mode:
                 position: fixed;
                 top: 12px;
                 right: 12px;
-                z-index: 9999;
+                z-index: 2147483647;
                 background: rgba(15, 23, 42, 0.75);
                 color: #e5e7eb;
                 border: 1px solid rgba(148, 163, 184, 0.6);
@@ -582,9 +582,10 @@ if presentation_mode:
                 cursor: pointer;
                 backdrop-filter: blur(6px);
                 pointer-events: auto;
+                text-decoration: none;
             }
         </style>
-        <button class="exit-presentation" onclick="window.location.search='?exit_presentation=1'">Exit</button>
+        <a class="exit-presentation" href="?exit_presentation=1">Exit</a>
         <script>
             window.addEventListener('keydown', function(e) {
                 if (e.key === 'p' || e.key === 'Escape') {
