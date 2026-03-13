@@ -459,6 +459,9 @@ st.sidebar.subheader("Layout")
 hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
 presentation_mode = st.sidebar.toggle("Presentation mode", value=False, key="presentation_mode")
 if hide_sidebar:
+    if st.button("Show sidebar", key="show_sidebar_btn"):
+        st.session_state["hide_sidebar"] = False
+        rerun()
     st.markdown(
         """
         <style>
