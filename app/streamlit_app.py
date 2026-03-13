@@ -439,6 +439,11 @@ if "exit_presentation" in query_params:
     st.session_state["presentation_mode"] = False
     st.query_params.clear()
     rerun()
+if "reset_ui" in query_params:
+    st.session_state["presentation_mode"] = False
+    st.session_state["hide_sidebar"] = False
+    st.query_params.clear()
+    rerun()
 
 auth_error_message = None
 if "auth_token" in st.session_state and "user" not in st.session_state:
@@ -489,6 +494,38 @@ if hide_sidebar:
                 left: 1rem;
             }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <style>
+            .stTabs, .stTabs [role="tablist"], .stDownloadButton, .stButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
+                display: none !important;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <style>
+            .ui-recover {
+                position: fixed;
+                bottom: 16px;
+                right: 16px;
+                z-index: 9999;
+                background: rgba(15, 23, 42, 0.75);
+                color: #e5e7eb;
+                border: 1px solid rgba(148, 163, 184, 0.6);
+                border-radius: 10px;
+                padding: 6px 10px;
+                font-size: 13px;
+                cursor: pointer;
+                backdrop-filter: blur(6px);
+            }
+        </style>
+        <button class="ui-recover" onclick="window.location.search='?reset_ui=1'">Restore UI</button>
         """,
         unsafe_allow_html=True,
     )
@@ -555,6 +592,12 @@ if presentation_mode:
                 }
             });
         </script>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <button class="ui-recover" onclick="window.location.search='?reset_ui=1'">Restore UI</button>
         """,
         unsafe_allow_html=True,
     )
