@@ -587,6 +587,8 @@ bg_mode = st.sidebar.selectbox(
     ["Theme Default", "Solid", "Gradient", "Image"],
     key="bg_mode",
 )
+if bg_mode != "Image":
+    st.session_state["bg_auto_applied"] = False
 bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
 bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
 bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
@@ -713,7 +715,7 @@ else:
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
 effective_mode = bg_mode
-if st.session_state.get("bg_auto_applied") and _current_bg_image_b64():
+if (bg_mode == "Image" or st.session_state.get("bg_auto_applied")) and _current_bg_image_b64():
     effective_mode = "Image"
     bg_image_b64 = _current_bg_image_b64()
     bg_image_type = _current_bg_content_type()
@@ -733,8 +735,6 @@ apply_background(
     bg_image_pos_x,
     bg_image_pos_y,
 )
-if st.session_state.get("bg_auto_applied") and effective_mode == "Image":
-    st.session_state["bg_auto_applied"] = False
 
 if st.sidebar.button("Save appearance"):
     save_mode = st.session_state.get("bg_mode")
