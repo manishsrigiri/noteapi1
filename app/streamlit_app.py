@@ -495,8 +495,30 @@ bg_image_fit = st.sidebar.selectbox(
     key="bg_image_fit",
 )
 bg_image_scale = st.sidebar.slider("Image scale (%)", 50, 200, key="bg_image_scale")
-bg_image_pos_x = st.sidebar.slider("Image position X (%)", 0, 100, key="bg_image_pos_x")
-bg_image_pos_y = st.sidebar.slider("Image position Y (%)", 0, 100, key="bg_image_pos_y")
+
+st.sidebar.markdown("**Image position**")
+pos_step = st.sidebar.select_slider("Step size", options=[1, 2, 5, 10], value=5)
+pos_cols = st.sidebar.columns(3)
+with pos_cols[0]:
+    if st.button("◀", key="bg_pos_left"):
+        st.session_state["bg_image_pos_x"] = max(0, st.session_state["bg_image_pos_x"] - pos_step)
+        rerun()
+with pos_cols[1]:
+    if st.button("▲", key="bg_pos_up"):
+        st.session_state["bg_image_pos_y"] = max(0, st.session_state["bg_image_pos_y"] - pos_step)
+        rerun()
+with pos_cols[2]:
+    if st.button("▶", key="bg_pos_right"):
+        st.session_state["bg_image_pos_x"] = min(100, st.session_state["bg_image_pos_x"] + pos_step)
+        rerun()
+pos_cols = st.sidebar.columns(3)
+with pos_cols[1]:
+    if st.button("▼", key="bg_pos_down"):
+        st.session_state["bg_image_pos_y"] = min(100, st.session_state["bg_image_pos_y"] + pos_step)
+        rerun()
+st.sidebar.caption(
+    f"X: {st.session_state['bg_image_pos_x']}%  Y: {st.session_state['bg_image_pos_y']}%"
+)
 
 st.sidebar.markdown("**Background gallery**")
 bg_uploads = st.sidebar.file_uploader(
