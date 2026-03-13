@@ -427,6 +427,10 @@ if "show_sidebar" in query_params:
     st.session_state["hide_sidebar"] = False
     st.query_params.clear()
     rerun()
+if "exit_presentation" in query_params:
+    st.session_state["presentation_mode"] = False
+    st.query_params.clear()
+    rerun()
 
 auth_error_message = None
 if "auth_token" in st.session_state and "user" not in st.session_state:
@@ -517,10 +521,32 @@ if presentation_mode:
             section[data-testid="stSidebar"] { display: none !important; }
             header, footer { display: none !important; }
             .stMainBlockContainer { padding-top: 0.5rem; }
-            .note-card, .stMetric, .stButton, .stDownloadButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
+            .note-card, .stMetric, .stDownloadButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
                 display: none !important;
             }
+            .exit-presentation {
+                position: fixed;
+                top: 12px;
+                right: 12px;
+                z-index: 9999;
+                background: rgba(15, 23, 42, 0.75);
+                color: #e5e7eb;
+                border: 1px solid rgba(148, 163, 184, 0.6);
+                border-radius: 10px;
+                padding: 6px 10px;
+                font-size: 13px;
+                cursor: pointer;
+                backdrop-filter: blur(6px);
+            }
         </style>
+        <button class="exit-presentation" onclick="window.location.search='?exit_presentation=1'">Exit</button>
+        <script>
+            window.addEventListener('keydown', function(e) {
+                if (e.key === 'p' || e.key === 'Escape') {
+                    window.location.search='?exit_presentation=1';
+                }
+            });
+        </script>
         """,
         unsafe_allow_html=True,
     )
@@ -647,6 +673,9 @@ apply_background(
     bg_image_pos_x,
     bg_image_pos_y,
 )
+
+if presentation_mode:
+    st.stop()
 
 if st.sidebar.button("Save appearance"):
     prefs_payload = {
