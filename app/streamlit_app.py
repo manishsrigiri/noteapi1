@@ -1046,12 +1046,12 @@ if "Admin" in tab_map:
                     "display_name": new_display_name.strip() or None,
                     "role": new_role,
                 }
-            result, error = auth_request("POST", "/auth/admin/users", payload=payload)
-            if error:
-                st.error(error)
-            else:
-                st.success(result.get("message", "User created"))
-                rerun()
+                result, error = auth_request("POST", "/auth/admin/users", payload=payload)
+                if error:
+                    st.error(error)
+                else:
+                    st.success(result.get("message", "User created"))
+                    rerun()
 
         st.subheader("User Appearance")
         users_payload, users_error = auth_request("GET", "/auth/admin/users")
