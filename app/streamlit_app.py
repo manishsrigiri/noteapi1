@@ -250,6 +250,7 @@ def _encode_background_uploads(uploads) -> list[dict]:
 
 def _set_bg_mode_image() -> None:
     st.session_state["bg_mode"] = "Image"
+    st.session_state["bg_image_fit"] = st.session_state.get("bg_image_fit", "Cover")
 
 
 def _show_sidebar() -> None:
