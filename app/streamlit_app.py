@@ -182,6 +182,10 @@ def _encode_background_uploads(uploads) -> list[dict]:
     return items
 
 
+def _set_bg_mode_image() -> None:
+    st.session_state["bg_mode"] = "Image"
+
+
 def api_request(method: str, path: str = "", payload=None):
     url = API_URL if not path else f"{API_URL}/{path.lstrip('/')}"
     headers = {}
@@ -453,7 +457,7 @@ if gallery_items:
         format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
     )
     st.session_state["bg_image_id"] = selected_id
-    use_selected = st.sidebar.button("Use selected image")
+    use_selected = st.sidebar.button("Use selected image", on_click=_set_bg_mode_image)
     remove_selected = st.sidebar.button("Remove selected")
     if remove_selected:
         st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
@@ -461,7 +465,6 @@ if gallery_items:
             st.session_state["bg_image_id"] = None
         rerun()
     if use_selected:
-        st.session_state["bg_mode"] = "Image"
         rerun()
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
