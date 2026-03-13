@@ -155,13 +155,8 @@ def apply_background(
     st.markdown(
         f"""
         <style>
-            body {{
+            .stApp, .stAppViewContainer {{
                 {bg_css}
-                background-color: transparent !important;
-            }}
-            .stApp, .stAppViewContainer, div[data-testid="stAppViewContainer"] {{
-                {bg_css}
-                background-color: transparent !important;
             }}
             {extra_css}
         </style>
@@ -184,8 +179,6 @@ def _ensure_ui_defaults() -> None:
     st.session_state.setdefault("bg_image_pos_x", 50)
     st.session_state.setdefault("bg_image_pos_y", 50)
     st.session_state.setdefault("hide_sidebar", False)
-    st.session_state.setdefault("bg_gallery_hashes", set())
-    st.session_state.setdefault("bg_auto_applied", False)
 
 
 def _apply_prefs_to_state(prefs: dict) -> None:
@@ -219,6 +212,35 @@ def _apply_prefs_to_state(prefs: dict) -> None:
         st.session_state["hide_sidebar"] = prefs.get("hide_sidebar")
 
 
+def _default_prefs_payload() -> dict:
+    return {
+        "theme": "Dark",
+        "background_mode": "Theme Default",
+        "background_solid": "#0b1020",
+        "background_gradient_start": "#0b1020",
+        "background_gradient_end": "#1f2937",
+        "background_gradient_dir": "to bottom right",
+        "background_image_id": None,
+        "background_image_fit": "Cover",
+        "background_image_scale": 100,
+        "background_image_pos_x": 50,
+        "background_image_pos_y": 50,
+        "backgrounds": [],
+        "hide_sidebar": False,
+    }
+
+
+def _reset_preferences() -> None:
+    defaults = _default_prefs_payload()
+    _apply_prefs_to_state(defaults)
+    st.session_state["bg_gallery"] = []
+    st.session_state["bg_image_id"] = None
+    st.session_state["hide_sidebar"] = False
+    _, pref_error = auth_request("PUT", "/auth/preferences", payload=defaults)
+    if pref_error:
+        st.error(pref_error)
+
+
 def _current_bg_image_b64() -> str | None:
     bg_id = st.session_state.get("bg_image_id")
     for item in st.session_state.get("bg_gallery", []):
@@ -241,8 +263,8 @@ def _encode_background_uploads(uploads) -> list[dict]:
         raw = upload.read()
         if not raw:
             continue
-        if len(raw) > 1_500_000:
-            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
+        if len(raw) > 1_100_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
             continue
         items.append(
             {
@@ -256,11 +278,7 @@ def _encode_background_uploads(uploads) -> list[dict]:
 
 
 def _set_bg_mode_image() -> None:
-    st.session_state["bg_auto_applied"] = True
-
-
-def _set_bg_selected() -> None:
-    return
+    st.session_state["bg_mode"] = "Image"
 
 
 def _show_sidebar() -> None:
@@ -464,6 +482,7 @@ if "show_sidebar" in query_params:
     rerun()
 if "reset_ui" in query_params:
     st.session_state["hide_sidebar"] = False
+    st.session_state["reset_ui"] = True
     st.query_params.clear()
     rerun()
 
@@ -488,6 +507,10 @@ if "prefs_loaded" not in st.session_state:
     if prefs_payload and not prefs_error:
         _apply_prefs_to_state(prefs_payload)
     st.session_state["prefs_loaded"] = True
+if st.session_state.pop("reset_ui", False):
+    _reset_preferences()
+    st.session_state["prefs_loaded"] = False
+    rerun()
 
 theme_options = list(THEMES.keys())
 theme = st.sidebar.selectbox("Theme", theme_options, key="theme_name")
@@ -516,18 +539,10 @@ if hide_sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.markdown(
-        """
-        <style>
-            .stTabs, .stTabs [role="tablist"], .stDownloadButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
-                display: none !important;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
     auth_token = st.session_state.get("auth_token", "")
     token_param = f"&auth_token={auth_token}" if auth_token else ""
+    show_sidebar_url = f"?show_sidebar=1{token_param}"
+    reset_ui_url = f"?reset_ui=1{token_param}"
     st.markdown(
         """
         <style>
@@ -551,7 +566,7 @@ if hide_sidebar:
         unsafe_allow_html=True,
     )
     st.markdown(
-        f'<a class="ui-recover" href="?show_sidebar=1{token_param}" target="_self" onclick="window.location.assign(this.href); return false;">Show sidebar</a>',
+        f'<a class="ui-recover" href="{show_sidebar_url}" target="_self" onclick="window.location.assign(this.href); return false;">Show sidebar</a>',
         unsafe_allow_html=True,
     )
     st.markdown(
@@ -572,11 +587,23 @@ if hide_sidebar:
                 backdrop-filter: blur(6px);
             }
         </style>
-        <button class="sidebar-reveal" onclick="window.location.search='?show_sidebar=1'">☰</button>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<button class="sidebar-reveal" onclick="window.location.assign(\'{show_sidebar_url}\')">☰</button>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<a class="ui-recover" style="bottom: 52px;" href="{reset_ui_url}" target="_self" onclick="window.location.assign(this.href); return false;">Reset appearance</a>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"""
         <script>
             window.addEventListener('keydown', function(e) {
                 if (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b')) {
-                    window.location.search='?show_sidebar=1';
+                    window.location.assign('{show_sidebar_url}');
                 }
             });
         </script>
@@ -586,8 +613,11 @@ if hide_sidebar:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Background")
-bg_mode = "Image" if st.session_state.get("bg_image_id") else "Theme Default"
-st.session_state["bg_mode"] = bg_mode
+bg_mode = st.sidebar.selectbox(
+    "Background style",
+    ["Theme Default", "Solid", "Gradient", "Image"],
+    key="bg_mode",
+)
 bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
 bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
 bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
@@ -651,37 +681,24 @@ bg_uploads = st.sidebar.file_uploader(
     key="bg_gallery_uploads",
 )
 if st.sidebar.button("Add to gallery"):
-    if not bg_uploads:
-        st.sidebar.warning("Select an image first.")
-    else:
-        gallery = list(st.session_state.get("bg_gallery", []))
-        hashes = set(st.session_state.get("bg_gallery_hashes", set()))
-        for upload in bg_uploads:
-            raw = upload.read()
-            if not raw:
-                continue
-            if len(raw) > 1_500_000:
-                st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
-                continue
-            digest = hashlib.sha256(raw).hexdigest()
-            if digest in hashes:
-                continue
-            b64 = base64.b64encode(raw).decode("ascii")
-            gallery.append(
-                {
-                    "id": uuid.uuid4().hex[:12],
-                    "name": upload.name,
-                    "content_type": upload.type or "image/png",
-                    "data_b64": b64,
-                }
-            )
-            hashes.add(digest)
-        st.session_state["bg_gallery"] = gallery[:8]
-    st.session_state["bg_gallery_hashes"] = hashes
-    if st.session_state.get("bg_gallery"):
-        st.session_state["bg_image_id"] = st.session_state["bg_gallery"][0].get("id")
-        st.session_state["bg_auto_applied"] = True
-    rerun()
+    gallery = list(st.session_state.get("bg_gallery", []))
+    for upload in bg_uploads or []:
+        raw = upload.read()
+        if not raw:
+            continue
+        if len(raw) > 1_100_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
+            continue
+        b64 = base64.b64encode(raw).decode("ascii")
+        gallery.append(
+            {
+                "id": uuid.uuid4().hex[:12],
+                "name": upload.name,
+                "content_type": upload.type or "image/png",
+                "data_b64": b64,
+            }
+        )
+    st.session_state["bg_gallery"] = gallery[:8]
 
 gallery_items = st.session_state.get("bg_gallery", [])
 if gallery_items:
@@ -691,9 +708,9 @@ if gallery_items:
         ids,
         index=ids.index(st.session_state.get("bg_image_id")) if st.session_state.get("bg_image_id") in ids else 0,
         format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
-        on_change=_set_bg_selected,
     )
     st.session_state["bg_image_id"] = selected_id
+    use_selected = st.sidebar.button("Use selected image", on_click=_set_bg_mode_image)
     remove_selected = st.sidebar.button("Remove selected")
     selected_item = next((item for item in gallery_items if item.get("id") == selected_id), None)
     if selected_item:
@@ -708,17 +725,15 @@ if gallery_items:
         if st.session_state.get("bg_image_id") == selected_id:
             st.session_state["bg_image_id"] = None
         rerun()
-else:
-    st.sidebar.info("Upload an image to start a background gallery.")
+    if use_selected:
+        rerun()
 
-bg_image_b64 = _current_bg_image_b64() if bg_mode == "Image" else None
-bg_image_type = _current_bg_content_type() if bg_mode == "Image" else None
-effective_mode = bg_mode
-if effective_mode == "Image" and not bg_image_b64:
-    effective_mode = "Theme Default"
-    st.sidebar.info("Image mode has no selected image. Showing theme background.")
+bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
+bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
+if st.session_state.get("bg_mode") == "Image" and not bg_image_b64:
+    st.sidebar.warning("Select a background image and click 'Use selected image'.")
 apply_background(
-    effective_mode,
+    bg_mode,
     bg_solid,
     bg_grad_start,
     bg_grad_end,
@@ -732,12 +747,9 @@ apply_background(
 )
 
 if st.sidebar.button("Save appearance"):
-    save_mode = st.session_state.get("bg_mode")
-    if st.session_state.get("bg_auto_applied") and _current_bg_image_b64():
-        save_mode = "Image"
     prefs_payload = {
         "theme": st.session_state.get("theme_name"),
-        "background_mode": save_mode,
+        "background_mode": st.session_state.get("bg_mode"),
         "background_solid": st.session_state.get("bg_solid"),
         "background_gradient_start": st.session_state.get("bg_grad_start"),
         "background_gradient_end": st.session_state.get("bg_grad_end"),
