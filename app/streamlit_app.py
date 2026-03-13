@@ -423,6 +423,10 @@ if "auth_token" in query_params and query_params["auth_token"]:
     st.session_state["auth_token"] = query_params["auth_token"]
     st.query_params.clear()
     rerun()
+if "show_sidebar" in query_params:
+    st.session_state["hide_sidebar"] = False
+    st.query_params.clear()
+    rerun()
 
 auth_error_message = None
 if "auth_token" in st.session_state and "user" not in st.session_state:
@@ -471,6 +475,35 @@ if hide_sidebar:
                 left: 1rem;
             }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <style>
+            .sidebar-reveal {
+                position: fixed;
+                top: 12px;
+                left: 12px;
+                z-index: 9999;
+                background: rgba(15, 23, 42, 0.75);
+                color: #e5e7eb;
+                border: 1px solid rgba(148, 163, 184, 0.6);
+                border-radius: 10px;
+                padding: 6px 10px;
+                font-size: 14px;
+                cursor: pointer;
+                backdrop-filter: blur(6px);
+            }
+        </style>
+        <button class="sidebar-reveal" onclick="window.location.search='?show_sidebar=1'">☰</button>
+        <script>
+            window.addEventListener('keydown', function(e) {
+                if (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b')) {
+                    window.location.search='?show_sidebar=1';
+                }
+            });
+        </script>
         """,
         unsafe_allow_html=True,
     )
