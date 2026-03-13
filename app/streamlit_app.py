@@ -155,8 +155,13 @@ def apply_background(
     st.markdown(
         f"""
         <style>
-            .stApp, .stAppViewContainer {{
+            body {{
                 {bg_css}
+                background-color: transparent !important;
+            }}
+            .stApp, .stAppViewContainer, div[data-testid="stAppViewContainer"] {{
+                {bg_css}
+                background-color: transparent !important;
             }}
             {extra_css}
         </style>
