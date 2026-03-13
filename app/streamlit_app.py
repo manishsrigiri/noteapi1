@@ -97,7 +97,7 @@ def api_request(method: str, path: str = "", payload=None):
     if auth_token:
         headers["Authorization"] = f"Bearer {auth_token}"
     try:
-        response = requests.request(method, url, json=payload, headers=headers, timeout=8)
+        response = requests.request(method, url, json=payload, headers=headers, timeout=30)
     except requests.RequestException as exc:
         return None, f"Network error: {exc}"
 
@@ -119,7 +119,7 @@ def auth_request(method: str, path: str, payload=None):
     if auth_token:
         headers["Authorization"] = f"Bearer {auth_token}"
     try:
-        response = requests.request(method, url, json=payload, headers=headers, timeout=8)
+        response = requests.request(method, url, json=payload, headers=headers, timeout=30)
     except requests.RequestException as exc:
         return None, f"Network error: {exc}"
     if response.status_code >= 400:
