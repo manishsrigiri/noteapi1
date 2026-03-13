@@ -453,12 +453,16 @@ if gallery_items:
         format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
     )
     st.session_state["bg_image_id"] = selected_id
-    if st.sidebar.button("Use selected image"):
-        st.session_state["bg_mode"] = "Image"
-    if st.sidebar.button("Remove selected"):
+    use_selected = st.sidebar.button("Use selected image")
+    remove_selected = st.sidebar.button("Remove selected")
+    if remove_selected:
         st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
         if st.session_state.get("bg_image_id") == selected_id:
             st.session_state["bg_image_id"] = None
+        rerun()
+    if use_selected:
+        st.session_state["bg_mode"] = "Image"
+        rerun()
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 apply_background(bg_mode, bg_solid, bg_grad_start, bg_grad_end, bg_grad_dir, bg_image_b64)
