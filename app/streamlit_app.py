@@ -1,5 +1,4 @@
 import base64
-import hashlib
 import json
 import os
 import uuid
@@ -256,7 +255,7 @@ def _set_bg_mode_image() -> None:
 
 
 def _set_bg_selected() -> None:
-    st.session_state["bg_auto_applied"] = True
+    return
 
 
 def _show_sidebar() -> None:
@@ -587,7 +586,7 @@ bg_mode = st.sidebar.selectbox(
     ["Theme Default", "Solid", "Gradient", "Image"],
     key="bg_mode",
 )
-if bg_mode != "Image":
+if bg_mode != "Image" and st.session_state.get("bg_auto_applied"):
     st.session_state["bg_auto_applied"] = False
 bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
 bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
@@ -678,11 +677,11 @@ if st.sidebar.button("Add to gallery"):
             )
             hashes.add(digest)
         st.session_state["bg_gallery"] = gallery[:8]
-        st.session_state["bg_gallery_hashes"] = hashes
-        if st.session_state.get("bg_gallery"):
-            st.session_state["bg_image_id"] = st.session_state["bg_gallery"][0].get("id")
-            _set_bg_mode_image()
-        rerun()
+    st.session_state["bg_gallery_hashes"] = hashes
+    if st.session_state.get("bg_gallery"):
+        st.session_state["bg_image_id"] = st.session_state["bg_gallery"][0].get("id")
+        st.session_state["bg_auto_applied"] = True
+    rerun()
 
 gallery_items = st.session_state.get("bg_gallery", [])
 if gallery_items:
@@ -715,7 +714,7 @@ else:
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
 effective_mode = bg_mode
-if (bg_mode == "Image" or st.session_state.get("bg_auto_applied")) and _current_bg_image_b64():
+if st.session_state.get("bg_auto_applied") and _current_bg_image_b64():
     effective_mode = "Image"
     bg_image_b64 = _current_bg_image_b64()
     bg_image_type = _current_bg_content_type()
