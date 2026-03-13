@@ -98,6 +98,7 @@ def apply_background(
     grad_end: str,
     grad_dir: str,
     image_b64: str | None,
+    image_content_type: str | None,
     image_fit: str,
     image_scale: int,
     image_pos_x: int,
@@ -115,9 +116,10 @@ def apply_background(
             size_css = "contain"
         elif image_fit == "Actual":
             size_css = f"{image_scale}% auto"
+        content_type = image_content_type or "image/png"
         bg_css = (
             "background-image: "
-            f"url('data:image/png;base64,{image_b64}');"
+            f"url('data:{content_type};base64,{image_b64}');"
             f"background-size: {size_css};"
             f"background-position: {image_pos_x}% {image_pos_y}%;"
             "background-repeat: no-repeat;"
@@ -215,6 +217,14 @@ def _current_bg_image_b64() -> str | None:
     for item in st.session_state.get("bg_gallery", []):
         if item.get("id") == bg_id:
             return item.get("data_b64")
+    return None
+
+
+def _current_bg_content_type() -> str | None:
+    bg_id = st.session_state.get("bg_image_id")
+    for item in st.session_state.get("bg_gallery", []):
+        if item.get("id") == bg_id:
+            return item.get("content_type", "image/png")
     return None
 
 
@@ -664,6 +674,14 @@ if gallery_items:
     st.session_state["bg_image_id"] = selected_id
     use_selected = st.sidebar.button("Use selected image", on_click=_set_bg_mode_image)
     remove_selected = st.sidebar.button("Remove selected")
+    selected_item = next((item for item in gallery_items if item.get("id") == selected_id), None)
+    if selected_item:
+        try:
+            preview_data = base64.b64decode(selected_item.get("data_b64", ""))
+        except (ValueError, TypeError):
+            preview_data = b""
+        if preview_data:
+            st.sidebar.image(preview_data, caption=selected_item.get("name", "Background"), use_container_width=True)
     if remove_selected:
         st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
         if st.session_state.get("bg_image_id") == selected_id:
@@ -673,6 +691,9 @@ if gallery_items:
         rerun()
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
+bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
+if st.session_state.get("bg_mode") == "Image" and not bg_image_b64:
+    st.sidebar.warning("Select a background image and click 'Use selected image'.")
 apply_background(
     bg_mode,
     bg_solid,
@@ -680,6 +701,7 @@ apply_background(
     bg_grad_end,
     bg_grad_dir,
     bg_image_b64,
+    bg_image_type,
     bg_image_fit,
     bg_image_scale,
     bg_image_pos_x,
