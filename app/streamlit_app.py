@@ -90,6 +90,37 @@ def apply_theme(theme_name: str) -> None:
     )
 
 
+def apply_background(mode: str, solid: str, grad_start: str, grad_end: str, grad_dir: str, image_b64: str | None) -> None:
+    if mode == "Theme Default":
+        return
+    if mode == "Solid":
+        bg_css = f"background: {solid};"
+    elif mode == "Gradient":
+        bg_css = f"background: linear-gradient({grad_dir}, {grad_start}, {grad_end});"
+    elif mode == "Image" and image_b64:
+        bg_css = (
+            "background-image: "
+            f"url('data:image/png;base64,{image_b64}');"
+            "background-size: cover;"
+            "background-position: center;"
+            "background-repeat: no-repeat;"
+            "background-attachment: fixed;"
+        )
+    else:
+        return
+
+    st.markdown(
+        f"""
+        <style>
+            .stApp {{
+                {bg_css}
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def api_request(method: str, path: str = "", payload=None):
     url = API_URL if not path else f"{API_URL}/{path.lstrip('/')}"
     headers = {}
@@ -293,6 +324,24 @@ if "auth_token" in st.session_state and "user" not in st.session_state:
 
 theme = st.sidebar.selectbox("Theme", list(THEMES.keys()), index=1)
 apply_theme(theme)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Background")
+bg_mode = st.sidebar.selectbox("Background style", ["Theme Default", "Solid", "Gradient", "Image"])
+bg_solid = st.sidebar.color_picker("Solid color", "#0b1020")
+bg_grad_start = st.sidebar.color_picker("Gradient start", "#0b1020")
+bg_grad_end = st.sidebar.color_picker("Gradient end", "#1f2937")
+bg_grad_dir = st.sidebar.selectbox(
+    "Gradient direction",
+    ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
+)
+bg_image_b64 = None
+if bg_mode == "Image":
+    bg_image = st.sidebar.file_uploader("Background image", type=["png", "jpg", "jpeg"])
+    if bg_image is not None:
+        bg_image_b64 = base64.b64encode(bg_image.read()).decode("ascii")
+
+apply_background(bg_mode, bg_solid, bg_grad_start, bg_grad_end, bg_grad_dir, bg_image_b64)
 st.sidebar.title("Control Room")
 
 if "user" not in st.session_state:
