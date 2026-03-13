@@ -652,31 +652,38 @@ bg_uploads = st.sidebar.file_uploader(
     accept_multiple_files=True,
     key="bg_gallery_uploads",
 )
-if bg_uploads:
-    gallery = list(st.session_state.get("bg_gallery", []))
-    hashes = set(st.session_state.get("bg_gallery_hashes", set()))
-    for upload in bg_uploads:
-        raw = upload.read()
-        if not raw:
-            continue
-        if len(raw) > 1_500_000:
-            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
-            continue
-        digest = hashlib.sha256(raw).hexdigest()
-        if digest in hashes:
-            continue
-        b64 = base64.b64encode(raw).decode("ascii")
-        gallery.append(
-            {
-                "id": uuid.uuid4().hex[:12],
-                "name": upload.name,
-                "content_type": upload.type or "image/png",
-                "data_b64": b64,
-            }
-        )
-        hashes.add(digest)
-    st.session_state["bg_gallery"] = gallery[:8]
-    st.session_state["bg_gallery_hashes"] = hashes
+if st.sidebar.button("Add to gallery"):
+    if not bg_uploads:
+        st.sidebar.warning("Select an image first.")
+    else:
+        gallery = list(st.session_state.get("bg_gallery", []))
+        hashes = set(st.session_state.get("bg_gallery_hashes", set()))
+        for upload in bg_uploads:
+            raw = upload.read()
+            if not raw:
+                continue
+            if len(raw) > 1_500_000:
+                st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
+                continue
+            digest = hashlib.sha256(raw).hexdigest()
+            if digest in hashes:
+                continue
+            b64 = base64.b64encode(raw).decode("ascii")
+            gallery.append(
+                {
+                    "id": uuid.uuid4().hex[:12],
+                    "name": upload.name,
+                    "content_type": upload.type or "image/png",
+                    "data_b64": b64,
+                }
+            )
+            hashes.add(digest)
+        st.session_state["bg_gallery"] = gallery[:8]
+        st.session_state["bg_gallery_hashes"] = hashes
+        if st.session_state.get("bg_gallery"):
+            st.session_state["bg_image_id"] = st.session_state["bg_gallery"][0].get("id")
+            _set_bg_mode_image()
+        rerun()
 
 gallery_items = st.session_state.get("bg_gallery", [])
 if gallery_items:
