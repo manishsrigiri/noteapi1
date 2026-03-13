@@ -476,8 +476,6 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Layout")
 hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
 if hide_sidebar:
-    if st.button("Show sidebar", key="show_sidebar_btn", on_click=_show_sidebar):
-        rerun()
     st.markdown(
         """
         <style>
@@ -500,7 +498,7 @@ if hide_sidebar:
     st.markdown(
         """
         <style>
-            .stTabs, .stTabs [role="tablist"], .stDownloadButton, .stButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
+            .stTabs, .stTabs [role="tablist"], .stDownloadButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
                 display: none !important;
             }
         </style>
@@ -523,9 +521,10 @@ if hide_sidebar:
                 font-size: 13px;
                 cursor: pointer;
                 backdrop-filter: blur(6px);
+                text-decoration: none;
             }
         </style>
-        <button class="ui-recover" onclick="window.location.search='?reset_ui=1'">Restore UI</button>
+        <a class="ui-recover" href="?show_sidebar=1">Show sidebar</a>
         """,
         unsafe_allow_html=True,
     )
