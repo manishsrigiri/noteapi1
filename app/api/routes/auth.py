@@ -362,6 +362,36 @@ def update_preferences(
     return {"message": "Preferences saved", "prefs": data}
 
 
+@router.get("/auth/admin/users/{username}/preferences")
+def admin_get_preferences(
+    username: str,
+    user: User = Depends(get_current_user),
+    user_collection=Depends(get_user_collection),
+):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    doc = user_collection.find_one({"_id": username.lower()}, {"ui_prefs": 1})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    return (doc or {}).get("ui_prefs", {})
+
+
+@router.put("/auth/admin/users/{username}/preferences")
+def admin_update_preferences(
+    username: str,
+    prefs: UserPreferences,
+    user: User = Depends(get_current_user),
+    user_collection=Depends(get_user_collection),
+):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    data = _sanitize_prefs(prefs)
+    result = user_collection.update_one({"_id": username.lower()}, {"$set": {"ui_prefs": data}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Preferences saved", "prefs": data}
+
+
 def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None

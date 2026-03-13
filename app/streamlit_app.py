@@ -162,6 +162,26 @@ def _current_bg_image_b64() -> str | None:
     return None
 
 
+def _encode_background_uploads(uploads) -> list[dict]:
+    items = []
+    for upload in uploads or []:
+        raw = upload.read()
+        if not raw:
+            continue
+        if len(raw) > 1_100_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
+            continue
+        items.append(
+            {
+                "id": uuid.uuid4().hex[:12],
+                "name": upload.name,
+                "content_type": upload.type or "image/png",
+                "data_b64": base64.b64encode(raw).decode("ascii"),
+            }
+        )
+    return items
+
+
 def api_request(method: str, path: str = "", payload=None):
     url = API_URL if not path else f"{API_URL}/{path.lstrip('/')}"
     headers = {}
@@ -1020,19 +1040,122 @@ if "Admin" in tab_map:
             new_password = st.text_input("Password", type="password")
             new_role = st.selectbox("Role", ["client", "editor", "admin"])
             create_submit = st.form_submit_button("Create User")
-        if create_submit:
-            payload = {
-                "username": new_username.strip(),
-                "password": new_password,
-                "display_name": new_display_name.strip() or None,
-                "role": new_role,
-            }
+            if create_submit:
+                payload = {
+                    "username": new_username.strip(),
+                    "password": new_password,
+                    "display_name": new_display_name.strip() or None,
+                    "role": new_role,
+                }
             result, error = auth_request("POST", "/auth/admin/users", payload=payload)
             if error:
                 st.error(error)
             else:
                 st.success(result.get("message", "User created"))
                 rerun()
+
+        st.subheader("User Appearance")
+        users_payload, users_error = auth_request("GET", "/auth/admin/users")
+        if users_error:
+            st.error(users_error)
+        else:
+            users = users_payload.get("users", [])
+            user_choices = [u.get("username", "") for u in users if u.get("username")]
+            target_user = st.selectbox("Select user", user_choices, key="admin_pref_user")
+            if st.button("Load preferences"):
+                prefs_payload, pref_error = auth_request(
+                    "GET",
+                    f"/auth/admin/users/{target_user}/preferences",
+                )
+                if pref_error:
+                    st.error(pref_error)
+                else:
+                    st.session_state["admin_pref_data"] = prefs_payload or {}
+
+            admin_prefs = st.session_state.get("admin_pref_data", {})
+            admin_gallery = list(admin_prefs.get("backgrounds", [])) if isinstance(admin_prefs, dict) else []
+            st.markdown("**Background gallery**")
+            admin_uploads = st.file_uploader(
+                "Add images for user",
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=True,
+                key="admin_bg_uploads",
+            )
+            if st.button("Add to user gallery"):
+                admin_gallery.extend(_encode_background_uploads(admin_uploads))
+                admin_gallery = admin_gallery[:8]
+                admin_prefs["backgrounds"] = admin_gallery
+                st.session_state["admin_pref_data"] = admin_prefs
+
+            if admin_gallery:
+                ids = [item.get("id") for item in admin_gallery]
+                selected_id = st.radio(
+                    "Select background",
+                    ids,
+                    index=ids.index(admin_prefs.get("background_image_id")) if admin_prefs.get("background_image_id") in ids else 0,
+                    format_func=lambda i: next((item.get("name", "image") for item in admin_gallery if item.get("id") == i), "image"),
+                    key="admin_bg_pick",
+                )
+                admin_prefs["background_image_id"] = selected_id
+                if st.button("Remove selected image"):
+                    admin_gallery = [item for item in admin_gallery if item.get("id") != selected_id]
+                    admin_prefs["backgrounds"] = admin_gallery
+                    if admin_prefs.get("background_image_id") == selected_id:
+                        admin_prefs["background_image_id"] = None
+                    st.session_state["admin_pref_data"] = admin_prefs
+
+            st.markdown("**Theme & background defaults**")
+            admin_prefs["theme"] = st.selectbox(
+                "Theme",
+                list(THEMES.keys()),
+                index=list(THEMES.keys()).index(admin_prefs.get("theme", "Dark")) if admin_prefs.get("theme") in THEMES else 1,
+                key="admin_theme",
+            )
+            admin_prefs["background_mode"] = st.selectbox(
+                "Background mode",
+                ["Theme Default", "Solid", "Gradient", "Image"],
+                index=["Theme Default", "Solid", "Gradient", "Image"].index(admin_prefs.get("background_mode", "Theme Default"))
+                if admin_prefs.get("background_mode") in {"Theme Default", "Solid", "Gradient", "Image"}
+                else 0,
+                key="admin_bg_mode",
+            )
+            admin_prefs["background_solid"] = st.color_picker(
+                "Solid color",
+                admin_prefs.get("background_solid", "#0b1020"),
+                key="admin_bg_solid",
+            )
+            admin_prefs["background_gradient_start"] = st.color_picker(
+                "Gradient start",
+                admin_prefs.get("background_gradient_start", "#0b1020"),
+                key="admin_bg_start",
+            )
+            admin_prefs["background_gradient_end"] = st.color_picker(
+                "Gradient end",
+                admin_prefs.get("background_gradient_end", "#1f2937"),
+                key="admin_bg_end",
+            )
+            admin_prefs["background_gradient_dir"] = st.selectbox(
+                "Gradient direction",
+                ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
+                index=["to bottom right", "to bottom", "to right", "135deg", "45deg"].index(
+                    admin_prefs.get("background_gradient_dir", "to bottom right")
+                )
+                if admin_prefs.get("background_gradient_dir") in {"to bottom right", "to bottom", "to right", "135deg", "45deg"}
+                else 0,
+                key="admin_bg_dir",
+            )
+
+            if st.button("Save user appearance"):
+                admin_prefs["backgrounds"] = admin_gallery
+                _, save_error = auth_request(
+                    "PUT",
+                    f"/auth/admin/users/{target_user}/preferences",
+                    payload=admin_prefs,
+                )
+                if save_error:
+                    st.error(save_error)
+                else:
+                    st.success("User appearance saved.")
 
         st.subheader("Change Requests")
         requests_payload, requests_error = auth_request("GET", "/notes/requests?status=pending")
