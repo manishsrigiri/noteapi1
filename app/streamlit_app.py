@@ -252,13 +252,10 @@ def _encode_background_uploads(uploads) -> list[dict]:
 
 
 def _set_bg_mode_image() -> None:
-    st.session_state["bg_mode"] = "Image"
-    st.session_state["bg_image_fit"] = st.session_state.get("bg_image_fit", "Cover")
     st.session_state["bg_auto_applied"] = True
 
 
 def _set_bg_selected() -> None:
-    st.session_state["bg_mode"] = "Image"
     st.session_state["bg_auto_applied"] = True
 
 
@@ -716,7 +713,11 @@ else:
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
 effective_mode = bg_mode
-if bg_mode == "Image" and not bg_image_b64:
+if st.session_state.get("bg_auto_applied") and _current_bg_image_b64():
+    effective_mode = "Image"
+    bg_image_b64 = _current_bg_image_b64()
+    bg_image_type = _current_bg_content_type()
+if effective_mode == "Image" and not bg_image_b64:
     effective_mode = "Theme Default"
     st.sidebar.info("Image mode has no selected image. Showing theme background.")
 apply_background(
@@ -732,11 +733,16 @@ apply_background(
     bg_image_pos_x,
     bg_image_pos_y,
 )
+if st.session_state.get("bg_auto_applied") and effective_mode == "Image":
+    st.session_state["bg_auto_applied"] = False
 
 if st.sidebar.button("Save appearance"):
+    save_mode = st.session_state.get("bg_mode")
+    if st.session_state.get("bg_auto_applied") and _current_bg_image_b64():
+        save_mode = "Image"
     prefs_payload = {
         "theme": st.session_state.get("theme_name"),
-        "background_mode": st.session_state.get("bg_mode"),
+        "background_mode": save_mode,
         "background_solid": st.session_state.get("bg_solid"),
         "background_gradient_start": st.session_state.get("bg_grad_start"),
         "background_gradient_end": st.session_state.get("bg_grad_end"),
