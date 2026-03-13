@@ -635,6 +635,11 @@ with tab_map["Requests"]:
             category = col3.text_input("Category", value="General")
             tags_raw = col4.text_input("Tags (comma separated)")
             content = st.text_area("Content", height=180)
+            attachments = st.file_uploader(
+                "Attach images/files",
+                accept_multiple_files=True,
+                key="request_create_attachments",
+            )
             c1, c2 = st.columns(2)
             pinned = c1.checkbox("Pin this note")
             is_private = c2.checkbox("Mark as private")
@@ -648,6 +653,7 @@ with tab_map["Requests"]:
                 "is_private": is_private,
                 "category": category.strip() or "General",
                 "tags": parse_tags(tags_raw),
+                "attachments": _encode_attachments(attachments),
             }
             result, err = auth_request(
                 "POST",
@@ -678,11 +684,21 @@ with tab_map["Requests"]:
                         "Tags (comma separated)",
                         value=", ".join(selected.get("tags", [])),
                     )
+                    keep_attachments = st.checkbox("Keep existing attachments", value=True)
+                    new_attachments = st.file_uploader(
+                        "Add attachments",
+                        accept_multiple_files=True,
+                        key="request_update_attachments",
+                    )
                     col3, col4 = st.columns(2)
                     u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
                     u_private = col4.checkbox("Private", value=selected.get("is_private", False))
                     submit_update = st.form_submit_button("Submit Update Request")
                 if submit_update:
+                    attachments_payload = []
+                    if keep_attachments:
+                        attachments_payload.extend(selected.get("attachments", []))
+                    attachments_payload.extend(_encode_attachments(new_attachments))
                     payload = {
                         "id": selected_id,
                         "title": u_title.strip(),
@@ -691,6 +707,7 @@ with tab_map["Requests"]:
                         "is_private": u_private,
                         "category": u_category.strip() or "General",
                         "tags": parse_tags(u_tags),
+                        "attachments": attachments_payload,
                     }
                     result, err = auth_request(
                         "POST",
