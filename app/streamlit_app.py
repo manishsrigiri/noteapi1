@@ -397,8 +397,7 @@ if "prefs_loaded" not in st.session_state:
     st.session_state["prefs_loaded"] = True
 
 theme_options = list(THEMES.keys())
-theme_index = theme_options.index(st.session_state.get("theme_name", "Dark")) if st.session_state.get("theme_name") in theme_options else 1
-theme = st.sidebar.selectbox("Theme", theme_options, index=theme_index, key="theme_name")
+theme = st.sidebar.selectbox("Theme", theme_options, key="theme_name")
 apply_theme(theme)
 
 st.sidebar.markdown("---")
@@ -408,9 +407,9 @@ bg_mode = st.sidebar.selectbox(
     ["Theme Default", "Solid", "Gradient", "Image"],
     key="bg_mode",
 )
-bg_solid = st.sidebar.color_picker("Solid color", st.session_state["bg_solid"], key="bg_solid")
-bg_grad_start = st.sidebar.color_picker("Gradient start", st.session_state["bg_grad_start"], key="bg_grad_start")
-bg_grad_end = st.sidebar.color_picker("Gradient end", st.session_state["bg_grad_end"], key="bg_grad_end")
+bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
+bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
+bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
 bg_grad_dir = st.sidebar.selectbox(
     "Gradient direction",
     ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
