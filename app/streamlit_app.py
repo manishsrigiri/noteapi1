@@ -505,6 +505,8 @@ if hide_sidebar:
         """,
         unsafe_allow_html=True,
     )
+    auth_token = st.session_state.get("auth_token", "")
+    token_param = f"&auth_token={auth_token}" if auth_token else ""
     st.markdown(
         """
         <style>
@@ -524,8 +526,11 @@ if hide_sidebar:
                 text-decoration: none;
             }
         </style>
-        <a class="ui-recover" href="?show_sidebar=1">Show sidebar</a>
         """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<a class="ui-recover" href="?show_sidebar=1{token_param}">Show sidebar</a>',
         unsafe_allow_html=True,
     )
     st.markdown(
