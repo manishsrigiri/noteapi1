@@ -548,6 +548,8 @@ with pos_cols[1]:
 st.sidebar.caption(
     f"X: {st.session_state['bg_image_pos_x']}%  Y: {st.session_state['bg_image_pos_y']}%"
 )
+bg_image_pos_x = st.session_state["bg_image_pos_x"]
+bg_image_pos_y = st.session_state["bg_image_pos_y"]
 
 st.sidebar.markdown("**Background gallery**")
 bg_uploads = st.sidebar.file_uploader(
