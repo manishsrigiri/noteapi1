@@ -232,6 +232,14 @@ def _set_bg_mode_image() -> None:
     st.session_state["bg_mode"] = "Image"
 
 
+def _show_sidebar() -> None:
+    st.session_state["hide_sidebar"] = False
+
+
+def _exit_presentation() -> None:
+    st.session_state["presentation_mode"] = False
+
+
 def api_request(method: str, path: str = "", payload=None):
     url = API_URL if not path else f"{API_URL}/{path.lstrip('/')}"
     headers = {}
@@ -463,8 +471,7 @@ st.sidebar.subheader("Layout")
 hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
 presentation_mode = st.sidebar.toggle("Presentation mode", value=False, key="presentation_mode")
 if hide_sidebar:
-    if st.button("Show sidebar", key="show_sidebar_btn"):
-        st.session_state["hide_sidebar"] = False
+    if st.button("Show sidebar", key="show_sidebar_btn", on_click=_show_sidebar):
         rerun()
     st.markdown(
         """
@@ -537,6 +544,7 @@ if presentation_mode:
                 font-size: 13px;
                 cursor: pointer;
                 backdrop-filter: blur(6px);
+                pointer-events: auto;
             }
         </style>
         <button class="exit-presentation" onclick="window.location.search='?exit_presentation=1'">Exit</button>
