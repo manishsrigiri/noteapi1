@@ -91,7 +91,14 @@ def apply_theme(theme_name: str) -> None:
     )
 
 
-def apply_background(mode: str, solid: str, grad_start: str, grad_end: str, grad_dir: str, image_b64: str | None) -> None:
+def apply_background(
+    mode: str,
+    solid: str,
+    grad_start: str,
+    grad_end: str,
+    grad_dir: str,
+    image_b64: str | None,
+) -> None:
     if mode == "Theme Default":
         return
     if mode == "Solid":
@@ -110,12 +117,26 @@ def apply_background(mode: str, solid: str, grad_start: str, grad_end: str, grad
     else:
         return
 
+    extra_css = ""
+    if mode == "Image":
+        extra_css = """
+            section[data-testid="stSidebar"] {
+                background: rgba(10, 15, 30, 0.70) !important;
+                backdrop-filter: blur(8px);
+            }
+            .note-card, .stMetric {
+                background-color: rgba(17, 24, 39, 0.72) !important;
+                backdrop-filter: blur(6px);
+            }
+        """
+
     st.markdown(
         f"""
         <style>
             .stApp {{
                 {bg_css}
             }}
+            {extra_css}
         </style>
         """,
         unsafe_allow_html=True,
