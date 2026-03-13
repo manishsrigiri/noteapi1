@@ -693,10 +693,12 @@ if gallery_items:
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
-if st.session_state.get("bg_mode") == "Image" and not bg_image_b64:
-    st.sidebar.warning("Select a background image and click 'Use selected image'.")
+effective_mode = bg_mode
+if bg_mode == "Image" and not bg_image_b64:
+    effective_mode = "Theme Default"
+    st.sidebar.info("Image mode has no selected image. Showing theme background.")
 apply_background(
-    bg_mode,
+    effective_mode,
     bg_solid,
     bg_grad_start,
     bg_grad_end,
