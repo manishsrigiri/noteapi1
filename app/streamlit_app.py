@@ -581,13 +581,8 @@ if hide_sidebar:
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Background")
-bg_mode = st.sidebar.selectbox(
-    "Background style",
-    ["Theme Default", "Solid", "Gradient", "Image"],
-    key="bg_mode",
-)
-if bg_mode != "Image" and st.session_state.get("bg_auto_applied"):
-    st.session_state["bg_auto_applied"] = False
+bg_mode = "Image" if st.session_state.get("bg_image_id") else "Theme Default"
+st.session_state["bg_mode"] = bg_mode
 bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
 bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
 bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
@@ -711,13 +706,9 @@ if gallery_items:
 else:
     st.sidebar.info("Upload an image to start a background gallery.")
 
-bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
-bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
+bg_image_b64 = _current_bg_image_b64() if bg_mode == "Image" else None
+bg_image_type = _current_bg_content_type() if bg_mode == "Image" else None
 effective_mode = bg_mode
-if st.session_state.get("bg_auto_applied") and _current_bg_image_b64():
-    effective_mode = "Image"
-    bg_image_b64 = _current_bg_image_b64()
-    bg_image_type = _current_bg_content_type()
 if effective_mode == "Image" and not bg_image_b64:
     effective_mode = "Theme Default"
     st.sidebar.info("Image mode has no selected image. Showing theme background.")
