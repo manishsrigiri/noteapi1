@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import uuid
 from datetime import datetime
 from urllib.parse import quote_plus
 
@@ -119,6 +120,46 @@ def apply_background(mode: str, solid: str, grad_start: str, grad_end: str, grad
         """,
         unsafe_allow_html=True,
     )
+
+
+def _ensure_ui_defaults() -> None:
+    st.session_state.setdefault("theme_name", "Dark")
+    st.session_state.setdefault("bg_mode", "Theme Default")
+    st.session_state.setdefault("bg_solid", "#0b1020")
+    st.session_state.setdefault("bg_grad_start", "#0b1020")
+    st.session_state.setdefault("bg_grad_end", "#1f2937")
+    st.session_state.setdefault("bg_grad_dir", "to bottom right")
+    st.session_state.setdefault("bg_gallery", [])
+    st.session_state.setdefault("bg_image_id", None)
+
+
+def _apply_prefs_to_state(prefs: dict) -> None:
+    if not isinstance(prefs, dict):
+        return
+    if prefs.get("theme"):
+        st.session_state["theme_name"] = prefs.get("theme")
+    if prefs.get("background_mode"):
+        st.session_state["bg_mode"] = prefs.get("background_mode")
+    if prefs.get("background_solid"):
+        st.session_state["bg_solid"] = prefs.get("background_solid")
+    if prefs.get("background_gradient_start"):
+        st.session_state["bg_grad_start"] = prefs.get("background_gradient_start")
+    if prefs.get("background_gradient_end"):
+        st.session_state["bg_grad_end"] = prefs.get("background_gradient_end")
+    if prefs.get("background_gradient_dir"):
+        st.session_state["bg_grad_dir"] = prefs.get("background_gradient_dir")
+    if isinstance(prefs.get("backgrounds"), list):
+        st.session_state["bg_gallery"] = prefs.get("backgrounds")
+    if prefs.get("background_image_id"):
+        st.session_state["bg_image_id"] = prefs.get("background_image_id")
+
+
+def _current_bg_image_b64() -> str | None:
+    bg_id = st.session_state.get("bg_image_id")
+    for item in st.session_state.get("bg_gallery", []):
+        if item.get("id") == bg_id:
+            return item.get("data_b64")
+    return None
 
 
 def api_request(method: str, path: str = "", payload=None):
@@ -322,31 +363,103 @@ if "auth_token" in st.session_state and "user" not in st.session_state:
     else:
         st.session_state["user"] = me
 
-theme = st.sidebar.selectbox("Theme", list(THEMES.keys()), index=1)
-apply_theme(theme)
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("Background")
-bg_mode = st.sidebar.selectbox("Background style", ["Theme Default", "Solid", "Gradient", "Image"])
-bg_solid = st.sidebar.color_picker("Solid color", "#0b1020")
-bg_grad_start = st.sidebar.color_picker("Gradient start", "#0b1020")
-bg_grad_end = st.sidebar.color_picker("Gradient end", "#1f2937")
-bg_grad_dir = st.sidebar.selectbox(
-    "Gradient direction",
-    ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
-)
-bg_image_b64 = None
-if bg_mode == "Image":
-    bg_image = st.sidebar.file_uploader("Background image", type=["png", "jpg", "jpeg"])
-    if bg_image is not None:
-        bg_image_b64 = base64.b64encode(bg_image.read()).decode("ascii")
-
-apply_background(bg_mode, bg_solid, bg_grad_start, bg_grad_end, bg_grad_dir, bg_image_b64)
 st.sidebar.title("Control Room")
 
 if "user" not in st.session_state:
     render_login_page(auth_error_message)
     st.stop()
+
+_ensure_ui_defaults()
+if "prefs_loaded" not in st.session_state:
+    prefs_payload, prefs_error = auth_request("GET", "/auth/preferences")
+    if prefs_payload and not prefs_error:
+        _apply_prefs_to_state(prefs_payload)
+    st.session_state["prefs_loaded"] = True
+
+theme_options = list(THEMES.keys())
+theme_index = theme_options.index(st.session_state.get("theme_name", "Dark")) if st.session_state.get("theme_name") in theme_options else 1
+theme = st.sidebar.selectbox("Theme", theme_options, index=theme_index, key="theme_name")
+apply_theme(theme)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Background")
+bg_mode = st.sidebar.selectbox(
+    "Background style",
+    ["Theme Default", "Solid", "Gradient", "Image"],
+    key="bg_mode",
+)
+bg_solid = st.sidebar.color_picker("Solid color", st.session_state["bg_solid"], key="bg_solid")
+bg_grad_start = st.sidebar.color_picker("Gradient start", st.session_state["bg_grad_start"], key="bg_grad_start")
+bg_grad_end = st.sidebar.color_picker("Gradient end", st.session_state["bg_grad_end"], key="bg_grad_end")
+bg_grad_dir = st.sidebar.selectbox(
+    "Gradient direction",
+    ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
+    key="bg_grad_dir",
+)
+
+st.sidebar.markdown("**Background gallery**")
+bg_uploads = st.sidebar.file_uploader(
+    "Add images",
+    type=["png", "jpg", "jpeg"],
+    accept_multiple_files=True,
+    key="bg_gallery_uploads",
+)
+if st.sidebar.button("Add to gallery"):
+    gallery = list(st.session_state.get("bg_gallery", []))
+    for upload in bg_uploads or []:
+        raw = upload.read()
+        if not raw:
+            continue
+        if len(raw) > 1_100_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
+            continue
+        b64 = base64.b64encode(raw).decode("ascii")
+        gallery.append(
+            {
+                "id": uuid.uuid4().hex[:12],
+                "name": upload.name,
+                "content_type": upload.type or "image/png",
+                "data_b64": b64,
+            }
+        )
+    st.session_state["bg_gallery"] = gallery[:8]
+
+gallery_items = st.session_state.get("bg_gallery", [])
+if gallery_items:
+    ids = [item.get("id") for item in gallery_items]
+    selected_id = st.sidebar.radio(
+        "Select background",
+        ids,
+        index=ids.index(st.session_state.get("bg_image_id")) if st.session_state.get("bg_image_id") in ids else 0,
+        format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
+    )
+    st.session_state["bg_image_id"] = selected_id
+    if st.sidebar.button("Use selected image"):
+        st.session_state["bg_mode"] = "Image"
+    if st.sidebar.button("Remove selected"):
+        st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
+        if st.session_state.get("bg_image_id") == selected_id:
+            st.session_state["bg_image_id"] = None
+
+bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
+apply_background(bg_mode, bg_solid, bg_grad_start, bg_grad_end, bg_grad_dir, bg_image_b64)
+
+if st.sidebar.button("Save appearance"):
+    prefs_payload = {
+        "theme": st.session_state.get("theme_name"),
+        "background_mode": st.session_state.get("bg_mode"),
+        "background_solid": st.session_state.get("bg_solid"),
+        "background_gradient_start": st.session_state.get("bg_grad_start"),
+        "background_gradient_end": st.session_state.get("bg_grad_end"),
+        "background_gradient_dir": st.session_state.get("bg_grad_dir"),
+        "background_image_id": st.session_state.get("bg_image_id"),
+        "backgrounds": st.session_state.get("bg_gallery", []),
+    }
+    _, pref_error = auth_request("PUT", "/auth/preferences", payload=prefs_payload)
+    if pref_error:
+        st.sidebar.error(pref_error)
+    else:
+        st.sidebar.success("Appearance saved.")
 
 user_role = st.session_state["user"].get("role", "client")
 can_edit = st.session_state["user"].get("is_admin", False) or user_role in {"client", "editor", "admin", "viewer"}
@@ -356,6 +469,15 @@ if st.sidebar.button("Logout"):
     auth_request("POST", "/auth/logout")
     st.session_state.pop("auth_token", None)
     st.session_state.pop("user", None)
+    st.session_state.pop("prefs_loaded", None)
+    st.session_state.pop("theme_name", None)
+    st.session_state.pop("bg_mode", None)
+    st.session_state.pop("bg_solid", None)
+    st.session_state.pop("bg_grad_start", None)
+    st.session_state.pop("bg_grad_end", None)
+    st.session_state.pop("bg_grad_dir", None)
+    st.session_state.pop("bg_gallery", None)
+    st.session_state.pop("bg_image_id", None)
     st.warning("You have been logged out.")
     st.stop()
 

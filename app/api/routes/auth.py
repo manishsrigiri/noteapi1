@@ -15,6 +15,7 @@ from app.models.models import (
     BasicLoginRequest,
     BasicRegisterRequest,
     SessionLogoutRequest,
+    UserPreferences,
     User,
 )
 from app.services.auth_service import bearer_scheme, create_session, get_current_user, hash_password
@@ -39,6 +40,8 @@ from app.utils.helpers import (
 
 router = APIRouter(tags=["auth"])
 ALLOWED_ROLES = {"viewer", "editor", "admin", "user", "client"}
+MAX_BG_COUNT = 8
+MAX_BG_B64 = 1_500_000
 
 
 def _normalize_role(role: str | None) -> str:
@@ -52,6 +55,23 @@ def _normalize_role(role: str | None) -> str:
 
 def _is_admin(username: str, role: str) -> bool:
     return role == "admin" or is_admin_username(username)
+
+
+def _sanitize_prefs(prefs: UserPreferences) -> dict:
+    data = prefs.model_dump()
+    backgrounds = []
+    for item in data.get("backgrounds", [])[:MAX_BG_COUNT]:
+        if not isinstance(item, dict):
+            continue
+        data_b64 = item.get("data_b64", "")
+        if not data_b64 or len(data_b64) > MAX_BG_B64:
+            continue
+        backgrounds.append(item)
+    data["backgrounds"] = backgrounds
+    bg_ids = {item.get("id") for item in backgrounds}
+    if data.get("background_image_id") not in bg_ids:
+        data["background_image_id"] = None
+    return data
 
 
 @router.get("/auth/github/login")
@@ -320,6 +340,26 @@ def auth_session_stats(
     usernames = {s.get("user", {}).get("username", "") for s in active_sessions}
     usernames.discard("")
     return {"active_sessions": len(active_sessions), "logged_in_users": len(usernames)}
+
+
+@router.get("/auth/preferences")
+def auth_preferences(
+    user: User = Depends(get_current_user),
+    user_collection=Depends(get_user_collection),
+):
+    doc = user_collection.find_one({"_id": user.username}, {"ui_prefs": 1})
+    return (doc or {}).get("ui_prefs", {})
+
+
+@router.put("/auth/preferences")
+def update_preferences(
+    prefs: UserPreferences,
+    user: User = Depends(get_current_user),
+    user_collection=Depends(get_user_collection),
+):
+    data = _sanitize_prefs(prefs)
+    user_collection.update_one({"_id": user.username}, {"$set": {"ui_prefs": data}}, upsert=True)
+    return {"message": "Preferences saved", "prefs": data}
 
 
 def _parse_iso(value: str | None) -> datetime | None:

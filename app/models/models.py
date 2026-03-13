@@ -76,3 +76,21 @@ class NoteChangeRequest(BaseModel):
 
 class ChangeDecisionRequest(BaseModel):
     reason: str | None = None
+
+
+class BackgroundItem(BaseModel):
+    id: str
+    name: str
+    data_b64: str
+    content_type: str = "image/png"
+
+
+class UserPreferences(BaseModel):
+    theme: str | None = None
+    background_mode: str | None = None
+    background_solid: str | None = None
+    background_gradient_start: str | None = None
+    background_gradient_end: str | None = None
+    background_gradient_dir: str | None = None
+    background_image_id: str | None = None
+    backgrounds: List[BackgroundItem] = Field(default_factory=list)
