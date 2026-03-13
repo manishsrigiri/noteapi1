@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 import uuid
@@ -179,6 +180,8 @@ def _ensure_ui_defaults() -> None:
     st.session_state.setdefault("bg_image_pos_x", 50)
     st.session_state.setdefault("bg_image_pos_y", 50)
     st.session_state.setdefault("hide_sidebar", False)
+    st.session_state.setdefault("bg_gallery_hashes", set())
+    st.session_state.setdefault("bg_auto_applied", False)
 
 
 def _apply_prefs_to_state(prefs: dict) -> None:
@@ -234,8 +237,8 @@ def _encode_background_uploads(uploads) -> list[dict]:
         raw = upload.read()
         if not raw:
             continue
-        if len(raw) > 1_100_000:
-            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
+        if len(raw) > 1_500_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
             continue
         items.append(
             {
@@ -251,6 +254,12 @@ def _encode_background_uploads(uploads) -> list[dict]:
 def _set_bg_mode_image() -> None:
     st.session_state["bg_mode"] = "Image"
     st.session_state["bg_image_fit"] = st.session_state.get("bg_image_fit", "Cover")
+    st.session_state["bg_auto_applied"] = True
+
+
+def _set_bg_selected() -> None:
+    st.session_state["bg_mode"] = "Image"
+    st.session_state["bg_auto_applied"] = True
 
 
 def _show_sidebar() -> None:
@@ -643,14 +652,18 @@ bg_uploads = st.sidebar.file_uploader(
     accept_multiple_files=True,
     key="bg_gallery_uploads",
 )
-if st.sidebar.button("Add to gallery"):
+if bg_uploads:
     gallery = list(st.session_state.get("bg_gallery", []))
-    for upload in bg_uploads or []:
+    hashes = set(st.session_state.get("bg_gallery_hashes", set()))
+    for upload in bg_uploads:
         raw = upload.read()
         if not raw:
             continue
-        if len(raw) > 1_100_000:
-            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
+        if len(raw) > 1_500_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
+            continue
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest in hashes:
             continue
         b64 = base64.b64encode(raw).decode("ascii")
         gallery.append(
@@ -661,7 +674,9 @@ if st.sidebar.button("Add to gallery"):
                 "data_b64": b64,
             }
         )
+        hashes.add(digest)
     st.session_state["bg_gallery"] = gallery[:8]
+    st.session_state["bg_gallery_hashes"] = hashes
 
 gallery_items = st.session_state.get("bg_gallery", [])
 if gallery_items:
@@ -671,9 +686,9 @@ if gallery_items:
         ids,
         index=ids.index(st.session_state.get("bg_image_id")) if st.session_state.get("bg_image_id") in ids else 0,
         format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
+        on_change=_set_bg_selected,
     )
     st.session_state["bg_image_id"] = selected_id
-    use_selected = st.sidebar.button("Use selected image", on_click=_set_bg_mode_image)
     remove_selected = st.sidebar.button("Remove selected")
     selected_item = next((item for item in gallery_items if item.get("id") == selected_id), None)
     if selected_item:
@@ -688,8 +703,8 @@ if gallery_items:
         if st.session_state.get("bg_image_id") == selected_id:
             st.session_state["bg_image_id"] = None
         rerun()
-    if use_selected:
-        rerun()
+else:
+    st.sidebar.info("Upload an image to start a background gallery.")
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
