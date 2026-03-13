@@ -130,6 +130,16 @@ def apply_background(
     extra_css = ""
     if mode == "Image":
         extra_css = """
+            body, .stApp, .stAppViewContainer {
+                background: transparent !important;
+            }
+            header, [data-testid="stToolbar"] {
+                background: transparent !important;
+                backdrop-filter: none !important;
+            }
+            .stApp {
+                min-height: 100vh;
+            }
             section[data-testid="stSidebar"] {
                 background: rgba(10, 15, 30, 0.70) !important;
                 backdrop-filter: blur(8px);
@@ -143,7 +153,7 @@ def apply_background(
     st.markdown(
         f"""
         <style>
-            .stApp {{
+            .stApp, .stAppViewContainer {{
                 {bg_css}
             }}
             {extra_css}
@@ -234,10 +244,6 @@ def _set_bg_mode_image() -> None:
 
 def _show_sidebar() -> None:
     st.session_state["hide_sidebar"] = False
-
-
-def _exit_presentation() -> None:
-    st.session_state["presentation_mode"] = False
 
 
 def api_request(method: str, path: str = "", payload=None):
@@ -435,12 +441,7 @@ if "show_sidebar" in query_params:
     st.session_state["hide_sidebar"] = False
     st.query_params.clear()
     rerun()
-if "exit_presentation" in query_params:
-    st.session_state["presentation_mode"] = False
-    st.query_params.clear()
-    rerun()
 if "reset_ui" in query_params:
-    st.session_state["presentation_mode"] = False
     st.session_state["hide_sidebar"] = False
     st.query_params.clear()
     rerun()
@@ -474,7 +475,6 @@ apply_theme(theme)
 st.sidebar.markdown("---")
 st.sidebar.subheader("Layout")
 hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
-presentation_mode = st.sidebar.toggle("Presentation mode", value=False, key="presentation_mode")
 if hide_sidebar:
     if st.button("Show sidebar", key="show_sidebar_btn", on_click=_show_sidebar):
         rerun()
@@ -555,50 +555,6 @@ if hide_sidebar:
                 }
             });
         </script>
-        """,
-        unsafe_allow_html=True,
-    )
-if presentation_mode:
-    st.markdown(
-        """
-        <style>
-            section[data-testid="stSidebar"] { display: none !important; }
-            header, footer { display: none !important; }
-            .stMainBlockContainer { padding-top: 0.5rem; }
-            .note-card, .stMetric, .stDownloadButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
-                display: none !important;
-            }
-            .exit-presentation {
-                position: fixed;
-                top: 12px;
-                right: 12px;
-                z-index: 2147483647;
-                background: rgba(15, 23, 42, 0.75);
-                color: #e5e7eb;
-                border: 1px solid rgba(148, 163, 184, 0.6);
-                border-radius: 10px;
-                padding: 6px 10px;
-                font-size: 13px;
-                cursor: pointer;
-                backdrop-filter: blur(6px);
-                pointer-events: auto;
-                text-decoration: none;
-            }
-        </style>
-        <a class="exit-presentation" href="?exit_presentation=1">Exit</a>
-        <script>
-            window.addEventListener('keydown', function(e) {
-                if (e.key === 'p' || e.key === 'Escape') {
-                    window.location.search='?exit_presentation=1';
-                }
-            });
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        """
-        <button class="ui-recover" onclick="window.location.search='?reset_ui=1'">Restore UI</button>
         """,
         unsafe_allow_html=True,
     )
@@ -725,9 +681,6 @@ apply_background(
     bg_image_pos_x,
     bg_image_pos_y,
 )
-
-if presentation_mode:
-    st.stop()
 
 if st.sidebar.button("Save appearance"):
     prefs_payload = {
