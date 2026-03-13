@@ -12,7 +12,7 @@ router = APIRouter(tags=["notes"])
 
 
 def _can_edit(user: User) -> bool:
-    return user.is_admin or user.role in {"editor", "admin"}
+    return user.is_admin or user.role in {"client", "editor", "admin", "viewer"}
 
 
 @router.post("/notes")

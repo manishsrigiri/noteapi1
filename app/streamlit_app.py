@@ -299,8 +299,8 @@ if "user" not in st.session_state:
     render_login_page(auth_error_message)
     st.stop()
 
-user_role = st.session_state["user"].get("role", "viewer")
-can_edit = st.session_state["user"].get("is_admin", False) or user_role in {"editor", "admin"}
+user_role = st.session_state["user"].get("role", "client")
+can_edit = st.session_state["user"].get("is_admin", False) or user_role in {"client", "editor", "admin", "viewer"}
 
 st.sidebar.success(f"Signed in as {st.session_state['user'].get('username', 'user')}")
 if st.sidebar.button("Logout"):
@@ -792,7 +792,7 @@ if "Admin" in tab_map:
             with st.form("admin_update_user"):
                 target_username = st.selectbox("User", [u.get("username", "") for u in users])
                 new_display_name = st.text_input("New display name")
-                new_role = st.selectbox("New role", ["", "viewer", "editor", "admin"])
+                new_role = st.selectbox("New role", ["", "client", "editor", "admin"])
                 update_submit = st.form_submit_button("Update User")
             if update_submit:
                 payload = {}
@@ -847,7 +847,7 @@ if "Admin" in tab_map:
             new_username = st.text_input("Username")
             new_display_name = st.text_input("Display name")
             new_password = st.text_input("Password", type="password")
-            new_role = st.selectbox("Role", ["viewer", "editor", "admin"])
+            new_role = st.selectbox("Role", ["client", "editor", "admin"])
             create_submit = st.form_submit_button("Create User")
         if create_submit:
             payload = {

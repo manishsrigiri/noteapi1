@@ -32,7 +32,7 @@ class User(BaseModel):
     display_name: str
     avatar_url: str | None = None
     is_admin: bool = False
-    role: str = "user"
+    role: str = "client"
 
 
 class BasicLoginRequest(BaseModel):
@@ -55,7 +55,7 @@ class AdminCreateUserRequest(BaseModel):
     username: str
     password: str
     display_name: str | None = None
-    role: str = "user"
+    role: str = "client"
 
 
 class AdminUpdateUserRequest(BaseModel):

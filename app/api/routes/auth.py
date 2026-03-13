@@ -38,13 +38,13 @@ from app.utils.helpers import (
 )
 
 router = APIRouter(tags=["auth"])
-ALLOWED_ROLES = {"viewer", "editor", "admin", "user"}
+ALLOWED_ROLES = {"viewer", "editor", "admin", "user", "client"}
 
 
 def _normalize_role(role: str | None) -> str:
-    normalized = (role or "user").strip().lower()
-    if normalized == "user":
-        normalized = "viewer"
+    normalized = (role or "client").strip().lower()
+    if normalized in {"user", "viewer"}:
+        normalized = "client"
     if normalized not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
     return normalized
@@ -114,8 +114,8 @@ def github_callback(
         username=profile.get("login", "github-user"),
         display_name=profile.get("name") or profile.get("login", "GitHub User"),
         avatar_url=profile.get("avatar_url"),
-        role="viewer",
-        is_admin=_is_admin(profile.get("login", ""), "viewer"),
+        role="client",
+        is_admin=_is_admin(profile.get("login", ""), "client"),
     )
     token = create_session(user, session_collection)
 
@@ -215,8 +215,8 @@ def google_callback(
         username=username,
         display_name=profile.get("name", username or "Google User"),
         avatar_url=profile.get("picture"),
-        role="viewer",
-        is_admin=_is_admin(username, "viewer"),
+        role="client",
+        is_admin=_is_admin(username, "client"),
     )
     token = create_session(user, session_collection)
 
@@ -282,7 +282,7 @@ def google_workspace_callback(
                     "email": email,
                     "oauth_provider": "google_workspace",
                     "oauth_sub": profile.get("sub", ""),
-                    "role": "viewer",
+                    "role": "client",
                     "created_at": now_iso(),
                 }
             )
@@ -429,7 +429,7 @@ def basic_register(
             "display_name": display_name,
             "password_hash": hash_password(password, salt),
             "salt": salt.hex(),
-            "role": "viewer",
+            "role": "client",
             "created_at": now_iso(),
         }
     )
@@ -448,7 +448,7 @@ def basic_login(
     valid_username = basic_auth_username().strip().lower()
     valid_password = basic_auth_password()
     if secrets.compare_digest(username, valid_username) and secrets.compare_digest(password, valid_password):
-        role = "admin" if is_admin_username(username) else "viewer"
+        role = "admin" if is_admin_username(username) else "client"
         user = User(
             id=f"basic-{username}",
             username=username,
