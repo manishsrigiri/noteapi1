@@ -5,7 +5,9 @@ from pymongo import MongoClient
 
 
 def get_client():
-    mongo_uri = os.getenv("MONGO_URI", "mongodb://mongo:27017")
+    mongo_uri = os.getenv("MONGO_URI", "mongodb://mongo:27017").strip()
+    if not mongo_uri:
+        mongo_uri = "mongodb://mongo:27017"
     return MongoClient(mongo_uri)
 
 
