@@ -530,7 +530,7 @@ if hide_sidebar:
         unsafe_allow_html=True,
     )
     st.markdown(
-        f'<a class="ui-recover" href="?show_sidebar=1{token_param}">Show sidebar</a>',
+        f'<a class="ui-recover" href="?show_sidebar=1{token_param}" target="_self" onclick="window.location.assign(this.href); return false;">Show sidebar</a>',
         unsafe_allow_html=True,
     )
     st.markdown(
