@@ -94,3 +94,8 @@ class UserPreferences(BaseModel):
     background_gradient_dir: str | None = None
     background_image_id: str | None = None
     backgrounds: List[BackgroundItem] = Field(default_factory=list)
+    hide_sidebar: bool | None = None
+    background_image_fit: str | None = None
+    background_image_scale: int | None = None
+    background_image_pos_x: int | None = None
+    background_image_pos_y: int | None = None

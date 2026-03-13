@@ -98,6 +98,10 @@ def apply_background(
     grad_end: str,
     grad_dir: str,
     image_b64: str | None,
+    image_fit: str,
+    image_scale: int,
+    image_pos_x: int,
+    image_pos_y: int,
 ) -> None:
     if mode == "Theme Default":
         return
@@ -106,13 +110,19 @@ def apply_background(
     elif mode == "Gradient":
         bg_css = f"background: linear-gradient({grad_dir}, {grad_start}, {grad_end});"
     elif mode == "Image" and image_b64:
+        size_css = "cover"
+        if image_fit == "Contain":
+            size_css = "contain"
+        elif image_fit == "Actual":
+            size_css = f"{image_scale}% auto"
         bg_css = (
             "background-image: "
             f"url('data:image/png;base64,{image_b64}');"
-            "background-size: cover;"
-            "background-position: center;"
+            f"background-size: {size_css};"
+            f"background-position: {image_pos_x}% {image_pos_y}%;"
             "background-repeat: no-repeat;"
             "background-attachment: fixed;"
+            "image-rendering: auto;"
         )
     else:
         return
@@ -152,6 +162,11 @@ def _ensure_ui_defaults() -> None:
     st.session_state.setdefault("bg_grad_dir", "to bottom right")
     st.session_state.setdefault("bg_gallery", [])
     st.session_state.setdefault("bg_image_id", None)
+    st.session_state.setdefault("bg_image_fit", "Cover")
+    st.session_state.setdefault("bg_image_scale", 100)
+    st.session_state.setdefault("bg_image_pos_x", 50)
+    st.session_state.setdefault("bg_image_pos_y", 50)
+    st.session_state.setdefault("hide_sidebar", False)
 
 
 def _apply_prefs_to_state(prefs: dict) -> None:
@@ -173,6 +188,16 @@ def _apply_prefs_to_state(prefs: dict) -> None:
         st.session_state["bg_gallery"] = prefs.get("backgrounds")
     if prefs.get("background_image_id"):
         st.session_state["bg_image_id"] = prefs.get("background_image_id")
+    if prefs.get("background_image_fit"):
+        st.session_state["bg_image_fit"] = prefs.get("background_image_fit")
+    if prefs.get("background_image_scale") is not None:
+        st.session_state["bg_image_scale"] = prefs.get("background_image_scale")
+    if prefs.get("background_image_pos_x") is not None:
+        st.session_state["bg_image_pos_x"] = prefs.get("background_image_pos_x")
+    if prefs.get("background_image_pos_y") is not None:
+        st.session_state["bg_image_pos_y"] = prefs.get("background_image_pos_y")
+    if prefs.get("hide_sidebar") is not None:
+        st.session_state["hide_sidebar"] = prefs.get("hide_sidebar")
 
 
 def _current_bg_image_b64() -> str | None:
@@ -426,6 +451,30 @@ theme = st.sidebar.selectbox("Theme", theme_options, key="theme_name")
 apply_theme(theme)
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("Layout")
+hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
+if hide_sidebar:
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stSidebar"] {
+                transform: translateX(-100%);
+            }
+            div[data-testid="stSidebarNav"] {
+                display: none;
+            }
+            section.main {
+                margin-left: 0 !important;
+            }
+            div[data-testid="stSidebarCollapseButton"] {
+                left: 1rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("Background")
 bg_mode = st.sidebar.selectbox(
     "Background style",
@@ -440,6 +489,14 @@ bg_grad_dir = st.sidebar.selectbox(
     ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
     key="bg_grad_dir",
 )
+bg_image_fit = st.sidebar.selectbox(
+    "Image fit",
+    ["Cover", "Contain", "Actual"],
+    key="bg_image_fit",
+)
+bg_image_scale = st.sidebar.slider("Image scale (%)", 50, 200, key="bg_image_scale")
+bg_image_pos_x = st.sidebar.slider("Image position X (%)", 0, 100, key="bg_image_pos_x")
+bg_image_pos_y = st.sidebar.slider("Image position Y (%)", 0, 100, key="bg_image_pos_y")
 
 st.sidebar.markdown("**Background gallery**")
 bg_uploads = st.sidebar.file_uploader(
@@ -489,7 +546,18 @@ if gallery_items:
         rerun()
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
-apply_background(bg_mode, bg_solid, bg_grad_start, bg_grad_end, bg_grad_dir, bg_image_b64)
+apply_background(
+    bg_mode,
+    bg_solid,
+    bg_grad_start,
+    bg_grad_end,
+    bg_grad_dir,
+    bg_image_b64,
+    bg_image_fit,
+    bg_image_scale,
+    bg_image_pos_x,
+    bg_image_pos_y,
+)
 
 if st.sidebar.button("Save appearance"):
     prefs_payload = {
@@ -500,7 +568,12 @@ if st.sidebar.button("Save appearance"):
         "background_gradient_end": st.session_state.get("bg_grad_end"),
         "background_gradient_dir": st.session_state.get("bg_grad_dir"),
         "background_image_id": st.session_state.get("bg_image_id"),
+        "background_image_fit": st.session_state.get("bg_image_fit"),
+        "background_image_scale": st.session_state.get("bg_image_scale"),
+        "background_image_pos_x": st.session_state.get("bg_image_pos_x"),
+        "background_image_pos_y": st.session_state.get("bg_image_pos_y"),
         "backgrounds": st.session_state.get("bg_gallery", []),
+        "hide_sidebar": st.session_state.get("hide_sidebar"),
     }
     _, pref_error = auth_request("PUT", "/auth/preferences", payload=prefs_payload)
     if pref_error:
@@ -525,6 +598,11 @@ if st.sidebar.button("Logout"):
     st.session_state.pop("bg_grad_dir", None)
     st.session_state.pop("bg_gallery", None)
     st.session_state.pop("bg_image_id", None)
+    st.session_state.pop("bg_image_fit", None)
+    st.session_state.pop("bg_image_scale", None)
+    st.session_state.pop("bg_image_pos_x", None)
+    st.session_state.pop("bg_image_pos_y", None)
+    st.session_state.pop("hide_sidebar", None)
     st.warning("You have been logged out.")
     st.stop()
 
@@ -1146,6 +1224,35 @@ if "Admin" in tab_map:
                 else 0,
                 key="admin_bg_mode",
             )
+            admin_prefs["background_image_fit"] = st.selectbox(
+                "Image fit",
+                ["Cover", "Contain", "Actual"],
+                index=["Cover", "Contain", "Actual"].index(admin_prefs.get("background_image_fit", "Cover"))
+                if admin_prefs.get("background_image_fit") in {"Cover", "Contain", "Actual"}
+                else 0,
+                key="admin_bg_fit",
+            )
+            admin_prefs["background_image_scale"] = st.slider(
+                "Image scale (%)",
+                50,
+                200,
+                value=int(admin_prefs.get("background_image_scale", 100) or 100),
+                key="admin_bg_scale",
+            )
+            admin_prefs["background_image_pos_x"] = st.slider(
+                "Image position X (%)",
+                0,
+                100,
+                value=int(admin_prefs.get("background_image_pos_x", 50) or 50),
+                key="admin_bg_pos_x",
+            )
+            admin_prefs["background_image_pos_y"] = st.slider(
+                "Image position Y (%)",
+                0,
+                100,
+                value=int(admin_prefs.get("background_image_pos_y", 50) or 50),
+                key="admin_bg_pos_y",
+            )
             admin_prefs["background_solid"] = st.color_picker(
                 "Solid color",
                 admin_prefs.get("background_solid", "#0b1020"),
@@ -1170,6 +1277,11 @@ if "Admin" in tab_map:
                 if admin_prefs.get("background_gradient_dir") in {"to bottom right", "to bottom", "to right", "135deg", "45deg"}
                 else 0,
                 key="admin_bg_dir",
+            )
+            admin_prefs["hide_sidebar"] = st.checkbox(
+                "Hide sidebar for user",
+                value=bool(admin_prefs.get("hide_sidebar", False)),
+                key="admin_hide_sidebar",
             )
 
             if st.button("Save user appearance"):
