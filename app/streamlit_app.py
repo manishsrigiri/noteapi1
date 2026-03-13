@@ -453,6 +453,7 @@ apply_theme(theme)
 st.sidebar.markdown("---")
 st.sidebar.subheader("Layout")
 hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
+presentation_mode = st.sidebar.toggle("Presentation mode", value=False, key="presentation_mode")
 if hide_sidebar:
     st.markdown(
         """
@@ -468,6 +469,20 @@ if hide_sidebar:
             }
             div[data-testid="stSidebarCollapseButton"] {
                 left: 1rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+if presentation_mode:
+    st.markdown(
+        """
+        <style>
+            section[data-testid="stSidebar"] { display: none !important; }
+            header, footer { display: none !important; }
+            .stMainBlockContainer { padding-top: 0.5rem; }
+            .note-card, .stMetric, .stButton, .stDownloadButton, .stSelectbox, .stTextInput, .stTextArea, .stCheckbox {
+                display: none !important;
             }
         </style>
         """,
@@ -494,6 +509,20 @@ bg_image_fit = st.sidebar.selectbox(
     ["Cover", "Contain", "Actual"],
     key="bg_image_fit",
 )
+st.sidebar.markdown("**Zoom**")
+zoom_cols = st.sidebar.columns(3)
+with zoom_cols[0]:
+    if st.button("−", key="bg_zoom_out"):
+        st.session_state["bg_image_scale"] = max(50, st.session_state["bg_image_scale"] - 10)
+        rerun()
+with zoom_cols[1]:
+    if st.button("Reset", key="bg_zoom_reset"):
+        st.session_state["bg_image_scale"] = 100
+        rerun()
+with zoom_cols[2]:
+    if st.button("+", key="bg_zoom_in"):
+        st.session_state["bg_image_scale"] = min(200, st.session_state["bg_image_scale"] + 10)
+        rerun()
 bg_image_scale = st.sidebar.slider("Image scale (%)", 50, 200, key="bg_image_scale")
 
 st.sidebar.markdown("**Image position**")
