@@ -8,6 +8,25 @@ from urllib.parse import quote_plus
 import requests
 import streamlit as st
 
+def _load_local_env(path: str = ".env") -> None:
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                os.environ.setdefault(key, value)
+    except OSError:
+        return
+
+
+_load_local_env()
+
 API_BASE_URL = os.getenv("API_BASE_URL", "http://fastapi:8000")
 PUBLIC_API_BASE_URL = os.getenv("PUBLIC_API_BASE_URL", "http://localhost:8000")
 PUBLIC_STREAMLIT_URL = os.getenv("PUBLIC_STREAMLIT_URL", "http://localhost:8501")
@@ -106,10 +125,12 @@ def apply_background(
 ) -> None:
     if mode == "Theme Default":
         return
+    page_bg_css = ""
+    overlay_css = ""
     if mode == "Solid":
-        bg_css = f"background: {solid};"
+        page_bg_css = f"background: {solid} !important;"
     elif mode == "Gradient":
-        bg_css = f"background: linear-gradient({grad_dir}, {grad_start}, {grad_end});"
+        page_bg_css = f"background: linear-gradient({grad_dir}, {grad_start}, {grad_end}) !important;"
     elif mode == "Image" and image_b64:
         size_css = "cover"
         if image_fit == "Contain":
@@ -117,14 +138,15 @@ def apply_background(
         elif image_fit == "Actual":
             size_css = f"{image_scale}% auto"
         content_type = image_content_type or "image/png"
-        bg_css = (
+        overlay_css = (
             "background-image: "
-            f"url('data:{content_type};base64,{image_b64}');"
-            f"background-size: {size_css};"
-            f"background-position: {image_pos_x}% {image_pos_y}%;"
-            "background-repeat: no-repeat;"
-            "background-attachment: fixed;"
-            "image-rendering: auto;"
+            f"url('data:{content_type};base64,{image_b64}') !important;"
+            f"background-size: {size_css} !important;"
+            f"background-position: {image_pos_x}% {image_pos_y}% !important;"
+            "background-repeat: no-repeat !important;"
+            "background-attachment: fixed !important;"
+            "background-color: transparent !important;"
+            "image-rendering: auto !important;"
         )
     else:
         return
@@ -132,10 +154,18 @@ def apply_background(
     extra_css = ""
     if mode == "Image":
         extra_css = """
-            body, .stApp, .stAppViewContainer {
+            html, body, .stApp, .stAppViewContainer {
                 background: transparent !important;
+                min-height: 100%;
             }
-            header, [data-testid="stToolbar"] {
+            body::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                z-index: -1;
+                pointer-events: none;
+            }
+            header, [data-testid="stToolbar"], [data-testid="stHeader"] {
                 background: transparent !important;
                 backdrop-filter: none !important;
             }
@@ -155,8 +185,11 @@ def apply_background(
     st.markdown(
         f"""
         <style>
-            .stApp, .stAppViewContainer {{
-                {bg_css}
+            html, body, .stApp, .stAppViewContainer, section.main {{
+                {page_bg_css}
+            }}
+            body::before {{
+                {overlay_css}
             }}
             {extra_css}
         </style>
@@ -179,6 +212,8 @@ def _ensure_ui_defaults() -> None:
     st.session_state.setdefault("bg_image_pos_x", 50)
     st.session_state.setdefault("bg_image_pos_y", 50)
     st.session_state.setdefault("hide_sidebar", False)
+    st.session_state.setdefault("focus_mode", False)
+    st.session_state.setdefault("focus_tasks", [])
 
 
 def _apply_prefs_to_state(prefs: dict) -> None:
@@ -263,8 +298,8 @@ def _encode_background_uploads(uploads) -> list[dict]:
         raw = upload.read()
         if not raw:
             continue
-        if len(raw) > 1_100_000:
-            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
+        if len(raw) > 1_500_000:
+            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
             continue
         items.append(
             {
@@ -511,6 +546,8 @@ if st.session_state.pop("reset_ui", False):
     _reset_preferences()
     st.session_state["prefs_loaded"] = False
     rerun()
+if "bg_mode_next" in st.session_state:
+    st.session_state["bg_mode"] = st.session_state.pop("bg_mode_next")
 
 theme_options = list(THEMES.keys())
 theme = st.sidebar.selectbox("Theme", theme_options, key="theme_name")
@@ -519,23 +556,69 @@ apply_theme(theme)
 st.sidebar.markdown("---")
 st.sidebar.subheader("Layout")
 hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
+focus_mode = st.sidebar.toggle("Focus mode (clock + today)", value=st.session_state["focus_mode"], key="focus_mode")
+sleep_cols = st.sidebar.columns([1, 1])
+with sleep_cols[0]:
+    if st.button("Sleep mode", key="sleep_mode_btn"):
+        st.session_state["hide_sidebar"] = True
+        st.session_state["focus_mode"] = True
+        rerun()
+with sleep_cols[1]:
+    if st.button("Exit sleep", key="sleep_mode_exit_btn"):
+        st.session_state["hide_sidebar"] = False
+        st.session_state["focus_mode"] = False
+        rerun()
+if focus_mode and not hide_sidebar:
+    st.sidebar.caption("Today's tasks")
+    task_text = st.sidebar.text_input("Task", key="focus_task_input")
+    if st.sidebar.button("Add task"):
+        cleaned = task_text.strip()
+        if cleaned:
+            st.session_state["focus_tasks"] = st.session_state.get("focus_tasks", []) + [cleaned]
+            st.session_state["focus_task_input"] = ""
+            rerun()
+    tasks = st.session_state.get("focus_tasks", [])
+    if tasks:
+        remove_idx = st.sidebar.selectbox(
+            "Remove task",
+            list(range(len(tasks))),
+            format_func=lambda i: tasks[i],
+            key="focus_remove_idx",
+        )
+        if st.sidebar.button("Remove selected task"):
+            st.session_state["focus_tasks"] = [t for i, t in enumerate(tasks) if i != remove_idx]
+            rerun()
 if hide_sidebar:
     st.markdown(
         """
-        <style>
-            section[data-testid="stSidebar"] {
-                transform: translateX(-100%);
-            }
-            div[data-testid="stSidebarNav"] {
-                display: none;
-            }
-            section.main {
-                margin-left: 0 !important;
-            }
-            div[data-testid="stSidebarCollapseButton"] {
-                left: 1rem;
-            }
-        </style>
+    <style>
+        section[data-testid="stSidebar"] {
+            transform: translateX(-100%);
+        }
+        div[data-testid="stSidebarNav"] {
+            display: none;
+        }
+        div[data-testid="stSidebarCollapseButton"] {
+            display: none !important;
+        }
+        header, [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stStatusWidget"] {
+            display: none !important;
+        }
+        section.main {
+            margin-left: 0 !important;
+            padding: 0 !important;
+        }
+        section.main .block-container,
+        .stMainBlockContainer,
+        div[data-testid="stMain"],
+        [data-testid="stAppViewContainer"] > .main {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            height: 0 !important;
+        }
+    </style>
         """,
         unsafe_allow_html=True,
     )
@@ -543,69 +626,93 @@ if hide_sidebar:
     token_param = f"&auth_token={auth_token}" if auth_token else ""
     show_sidebar_url = f"?show_sidebar=1{token_param}"
     reset_ui_url = f"?reset_ui=1{token_param}"
-    st.markdown(
-        """
-        <style>
-            .ui-recover {
-                position: fixed;
-                bottom: 16px;
-                right: 16px;
-                z-index: 9999;
-                background: rgba(15, 23, 42, 0.75);
-                color: #e5e7eb;
-                border: 1px solid rgba(148, 163, 184, 0.6);
-                border-radius: 10px;
-                padding: 6px 10px;
-                font-size: 13px;
-                cursor: pointer;
-                backdrop-filter: blur(6px);
-                text-decoration: none;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<a class="ui-recover" href="{show_sidebar_url}" target="_self" onclick="window.location.assign(this.href); return false;">Show sidebar</a>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        """
-        <style>
-            .sidebar-reveal {
-                position: fixed;
-                top: 12px;
-                left: 12px;
-                z-index: 9999;
-                background: rgba(15, 23, 42, 0.75);
-                color: #e5e7eb;
-                border: 1px solid rgba(148, 163, 184, 0.6);
-                border-radius: 10px;
-                padding: 6px 10px;
-                font-size: 14px;
-                cursor: pointer;
-                backdrop-filter: blur(6px);
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<button class="sidebar-reveal" onclick="window.location.assign(\'{show_sidebar_url}\')">☰</button>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f'<a class="ui-recover" style="bottom: 52px;" href="{reset_ui_url}" target="_self" onclick="window.location.assign(this.href); return false;">Reset appearance</a>',
-        unsafe_allow_html=True,
-    )
+    tasks_json = json.dumps(st.session_state.get("focus_tasks", []))
+    focus_mode_enabled = str(bool(st.session_state.get("focus_mode"))).lower()
     st.markdown(
         f"""
         <script>
+            function ensureSidebarReveal() {{
+                let wrap = document.getElementById("sidebar-reveal-global");
+                if (!wrap) {{
+                    wrap = document.createElement("div");
+                    wrap.id = "sidebar-reveal-global";
+                    wrap.style.position = "fixed";
+                    wrap.style.bottom = "16px";
+                    wrap.style.right = "16px";
+                    wrap.style.zIndex = "9999";
+                    wrap.innerHTML = `
+                        <button id="sidebar-reveal-btn" style="background: rgba(15,23,42,0.75); color:#e5e7eb; border:1px solid rgba(148,163,184,0.6); border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer; backdrop-filter: blur(6px);">Sidebar</button>
+                    `;
+                    document.body.appendChild(wrap);
+                    document.getElementById("sidebar-reveal-btn").onclick = function() {{
+                        window.location.assign("{show_sidebar_url}");
+                    }};
+                }}
+            }}
+
+            function ensureFocusOverlay(tasks) {{
+                let overlay = document.getElementById("focus-overlay");
+                if (!overlay) {{
+                    overlay = document.createElement("div");
+                    overlay.id = "focus-overlay";
+                    overlay.style.position = "fixed";
+                    overlay.style.inset = "0";
+                    overlay.style.display = "flex";
+                    overlay.style.alignItems = "center";
+                    overlay.style.justifyContent = "center";
+                    overlay.style.zIndex = "9998";
+                    overlay.style.pointerEvents = "none";
+                    overlay.innerHTML = `
+                        <div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.4);border-radius:16px;padding:24px 28px;backdrop-filter:blur(8px);min-width:320px;color:#f8fafc;text-align:center;">
+                            <div id="focus-clock" style="font-size:42px;font-weight:700;letter-spacing:1px;">--:--</div>
+                            <div id="focus-date" style="margin-top:6px;font-size:14px;color:rgba(226,232,240,0.85);">--</div>
+                            <ul id="focus-tasks" style="margin-top:14px;text-align:left;"></ul>
+                        </div>
+                    `;
+                    document.body.appendChild(overlay);
+                }}
+                const list = overlay.querySelector("#focus-tasks");
+                list.innerHTML = "";
+                if (!tasks.length) {{
+                    const li = document.createElement("li");
+                    li.textContent = "No tasks yet";
+                    list.appendChild(li);
+                }} else {{
+                    tasks.forEach(t => {{
+                        const li = document.createElement("li");
+                        li.textContent = t;
+                        li.style.margin = "6px 0";
+                        list.appendChild(li);
+                    }});
+                }}
+            }}
+
+            function updateFocusClock() {{
+                const now = new Date();
+                const hours = String(now.getHours()).padStart(2, "0");
+                const minutes = String(now.getMinutes()).padStart(2, "0");
+                const clock = document.getElementById("focus-clock");
+                const date = document.getElementById("focus-date");
+                if (clock) clock.textContent = `${{hours}}:${{minutes}}`;
+                if (date) date.textContent = now.toDateString();
+            }}
+
+            ensureSidebarReveal();
             window.addEventListener('keydown', function(e) {{
                 if (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b')) {{
                     window.location.assign('{show_sidebar_url}');
                 }}
             }});
+
+            const focusMode = {focus_mode_enabled};
+            if (focusMode) {{
+                ensureFocusOverlay({tasks_json});
+                updateFocusClock();
+                setInterval(updateFocusClock, 1000);
+            }} else {{
+                const overlay = document.getElementById("focus-overlay");
+                if (overlay) overlay.remove();
+            }}
         </script>
         """,
         unsafe_allow_html=True,
@@ -618,120 +725,138 @@ bg_mode = st.sidebar.selectbox(
     ["Theme Default", "Solid", "Gradient", "Image"],
     key="bg_mode",
 )
-bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
-bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
-bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
-bg_grad_dir = st.sidebar.selectbox(
-    "Gradient direction",
-    ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
-    key="bg_grad_dir",
-)
-bg_image_fit = st.sidebar.selectbox(
-    "Image fit",
-    ["Cover", "Contain", "Actual"],
-    key="bg_image_fit",
-)
-st.sidebar.markdown("**Zoom**")
-zoom_cols = st.sidebar.columns(3)
-with zoom_cols[0]:
-    if st.button("−", key="bg_zoom_out"):
-        st.session_state["bg_image_scale"] = max(50, st.session_state["bg_image_scale"] - 10)
-        rerun()
-with zoom_cols[1]:
-    if st.button("Reset", key="bg_zoom_reset"):
-        st.session_state["bg_image_scale"] = 100
-        rerun()
-with zoom_cols[2]:
-    if st.button("+", key="bg_zoom_in"):
-        st.session_state["bg_image_scale"] = min(200, st.session_state["bg_image_scale"] + 10)
-        rerun()
-bg_image_scale = st.sidebar.slider("Image scale (%)", 50, 200, key="bg_image_scale")
+bg_solid = st.session_state.get("bg_solid")
+bg_grad_start = st.session_state.get("bg_grad_start")
+bg_grad_end = st.session_state.get("bg_grad_end")
+bg_grad_dir = st.session_state.get("bg_grad_dir")
+bg_image_fit = st.session_state.get("bg_image_fit")
+bg_image_scale = st.session_state.get("bg_image_scale")
+bg_image_pos_x = st.session_state.get("bg_image_pos_x")
+bg_image_pos_y = st.session_state.get("bg_image_pos_y")
 
-st.sidebar.markdown("**Image position**")
-pos_step = st.sidebar.select_slider("Step size", options=[1, 2, 5, 10], value=5)
-pos_cols = st.sidebar.columns(3)
-with pos_cols[0]:
-    if st.button("◀", key="bg_pos_left"):
-        st.session_state["bg_image_pos_x"] = max(0, st.session_state["bg_image_pos_x"] - pos_step)
-        rerun()
-with pos_cols[1]:
-    if st.button("▲", key="bg_pos_up"):
-        st.session_state["bg_image_pos_y"] = max(0, st.session_state["bg_image_pos_y"] - pos_step)
-        rerun()
-with pos_cols[2]:
-    if st.button("▶", key="bg_pos_right"):
-        st.session_state["bg_image_pos_x"] = min(100, st.session_state["bg_image_pos_x"] + pos_step)
-        rerun()
-pos_cols = st.sidebar.columns(3)
-with pos_cols[1]:
-    if st.button("▼", key="bg_pos_down"):
-        st.session_state["bg_image_pos_y"] = min(100, st.session_state["bg_image_pos_y"] + pos_step)
-        rerun()
-st.sidebar.caption(
-    f"X: {st.session_state['bg_image_pos_x']}%  Y: {st.session_state['bg_image_pos_y']}%"
-)
-bg_image_pos_x = st.session_state["bg_image_pos_x"]
-bg_image_pos_y = st.session_state["bg_image_pos_y"]
-
-st.sidebar.markdown("**Background gallery**")
-bg_uploads = st.sidebar.file_uploader(
-    "Add images",
-    type=["png", "jpg", "jpeg"],
-    accept_multiple_files=True,
-    key="bg_gallery_uploads",
-)
-if st.sidebar.button("Add to gallery"):
-    gallery = list(st.session_state.get("bg_gallery", []))
-    for upload in bg_uploads or []:
-        raw = upload.read()
-        if not raw:
-            continue
-        if len(raw) > 1_100_000:
-            st.sidebar.warning(f"{upload.name} is too large. Keep images under 1MB.")
-            continue
-        b64 = base64.b64encode(raw).decode("ascii")
-        gallery.append(
-            {
-                "id": uuid.uuid4().hex[:12],
-                "name": upload.name,
-                "content_type": upload.type or "image/png",
-                "data_b64": b64,
-            }
-        )
-    st.session_state["bg_gallery"] = gallery[:8]
-
-gallery_items = st.session_state.get("bg_gallery", [])
-if gallery_items:
-    ids = [item.get("id") for item in gallery_items]
-    selected_id = st.sidebar.radio(
-        "Select background",
-        ids,
-        index=ids.index(st.session_state.get("bg_image_id")) if st.session_state.get("bg_image_id") in ids else 0,
-        format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
+if bg_mode == "Solid":
+    bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
+elif bg_mode == "Gradient":
+    bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
+    bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
+    bg_grad_dir = st.sidebar.selectbox(
+        "Gradient direction",
+        ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
+        key="bg_grad_dir",
     )
-    st.session_state["bg_image_id"] = selected_id
-    use_selected = st.sidebar.button("Use selected image", on_click=_set_bg_mode_image)
-    remove_selected = st.sidebar.button("Remove selected")
-    selected_item = next((item for item in gallery_items if item.get("id") == selected_id), None)
-    if selected_item:
-        try:
-            preview_data = base64.b64decode(selected_item.get("data_b64", ""))
-        except (ValueError, TypeError):
-            preview_data = b""
-        if preview_data:
-            st.sidebar.image(preview_data, caption=selected_item.get("name", "Background"), use_container_width=True)
-    if remove_selected:
-        st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
-        if st.session_state.get("bg_image_id") == selected_id:
-            st.session_state["bg_image_id"] = None
-        rerun()
-    if use_selected:
-        rerun()
+elif bg_mode == "Image":
+    st.sidebar.markdown("**Background gallery**")
+    bg_uploads = st.sidebar.file_uploader(
+        "Add images",
+        type=["png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+        key="bg_gallery_uploads",
+    )
+    if st.sidebar.button("Add to gallery"):
+        gallery = list(st.session_state.get("bg_gallery", []))
+        for upload in bg_uploads or []:
+            raw = upload.read()
+            if not raw:
+                continue
+            if len(raw) > 1_500_000:
+                st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
+                continue
+            b64 = base64.b64encode(raw).decode("ascii")
+            gallery.append(
+                {
+                    "id": uuid.uuid4().hex[:12],
+                    "name": upload.name,
+                    "content_type": upload.type or "image/png",
+                    "data_b64": b64,
+                }
+            )
+        st.session_state["bg_gallery"] = gallery[:8]
+        if gallery and st.session_state.get("bg_image_id") is None:
+            st.session_state["bg_image_id"] = gallery[0]["id"]
+            rerun()
+
+    gallery_items = st.session_state.get("bg_gallery", [])
+    if gallery_items:
+        ids = [item.get("id") for item in gallery_items]
+        if st.session_state.get("bg_image_id") not in ids:
+            st.session_state["bg_image_id"] = ids[0]
+            rerun()
+        selected_id = st.sidebar.radio(
+            "Select background",
+            ids,
+            index=ids.index(st.session_state.get("bg_image_id")) if st.session_state.get("bg_image_id") in ids else 0,
+            format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
+        )
+        st.session_state["bg_image_id"] = selected_id
+        remove_selected = st.sidebar.button("Remove selected")
+        selected_item = next((item for item in gallery_items if item.get("id") == selected_id), None)
+        if selected_item:
+            try:
+                preview_data = base64.b64decode(selected_item.get("data_b64", ""))
+            except (ValueError, TypeError):
+                preview_data = b""
+            if preview_data:
+                st.sidebar.image(preview_data, caption=selected_item.get("name", "Background"), use_container_width=True)
+        if remove_selected:
+            st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
+            if st.session_state.get("bg_image_id") == selected_id:
+                st.session_state["bg_image_id"] = None
+            rerun()
+    else:
+        st.sidebar.info("Upload an image to use it as the background.")
+
+    if st.session_state.get("bg_image_id"):
+        bg_image_fit = st.sidebar.selectbox(
+            "Image fit",
+            ["Cover", "Contain", "Actual"],
+            key="bg_image_fit",
+        )
+        st.sidebar.markdown("**Zoom**")
+        zoom_cols = st.sidebar.columns(3)
+        with zoom_cols[0]:
+            if st.button("−", key="bg_zoom_out"):
+                st.session_state["bg_image_scale"] = max(50, st.session_state["bg_image_scale"] - 10)
+                rerun()
+        with zoom_cols[1]:
+            if st.button("Reset", key="bg_zoom_reset"):
+                st.session_state["bg_image_scale"] = 100
+                rerun()
+        with zoom_cols[2]:
+            if st.button("+", key="bg_zoom_in"):
+                st.session_state["bg_image_scale"] = min(200, st.session_state["bg_image_scale"] + 10)
+                rerun()
+        bg_image_scale = st.sidebar.slider("Image scale (%)", 50, 200, key="bg_image_scale")
+
+        st.sidebar.markdown("**Image position**")
+        pos_step = st.sidebar.select_slider("Step size", options=[1, 2, 5, 10], value=5)
+        pos_cols = st.sidebar.columns(3)
+        with pos_cols[0]:
+            if st.button("◀", key="bg_pos_left"):
+                st.session_state["bg_image_pos_x"] = max(0, st.session_state["bg_image_pos_x"] - pos_step)
+                rerun()
+        with pos_cols[1]:
+            if st.button("▲", key="bg_pos_up"):
+                st.session_state["bg_image_pos_y"] = max(0, st.session_state["bg_image_pos_y"] - pos_step)
+                rerun()
+        with pos_cols[2]:
+            if st.button("▶", key="bg_pos_right"):
+                st.session_state["bg_image_pos_x"] = min(100, st.session_state["bg_image_pos_x"] + pos_step)
+                rerun()
+        pos_cols = st.sidebar.columns(3)
+        with pos_cols[1]:
+            if st.button("▼", key="bg_pos_down"):
+                st.session_state["bg_image_pos_y"] = min(100, st.session_state["bg_image_pos_y"] + pos_step)
+                rerun()
+        st.sidebar.caption(
+            f"X: {st.session_state['bg_image_pos_x']}%  Y: {st.session_state['bg_image_pos_y']}%"
+        )
+        bg_image_pos_x = st.session_state["bg_image_pos_x"]
+        bg_image_pos_y = st.session_state["bg_image_pos_y"]
 
 bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
 bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
 if st.session_state.get("bg_mode") == "Image" and not bg_image_b64:
-    st.sidebar.warning("Select a background image and click 'Use selected image'.")
+    st.sidebar.warning("Select a background image from the gallery to apply it.")
 apply_background(
     bg_mode,
     bg_solid,

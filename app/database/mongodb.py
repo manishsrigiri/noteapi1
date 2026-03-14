@@ -4,6 +4,26 @@ from fastapi import Depends
 from pymongo import MongoClient
 
 
+def _load_local_env(path: str = ".env") -> None:
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                os.environ.setdefault(key, value)
+    except OSError:
+        return
+
+
+_load_local_env()
+
+
 def get_client():
     mongo_uri = os.getenv("MONGO_URI", "mongodb://mongo:27017").strip()
     if not mongo_uri:
