@@ -515,6 +515,10 @@ if "show_sidebar" in query_params:
     st.session_state["hide_sidebar"] = False
     st.query_params.clear()
     rerun()
+if "hide_sidebar" in query_params:
+    st.session_state["hide_sidebar"] = True
+    st.query_params.clear()
+    rerun()
 if "reset_ui" in query_params:
     st.session_state["hide_sidebar"] = False
     st.session_state["reset_ui"] = True
@@ -631,22 +635,32 @@ if hide_sidebar:
     st.markdown(
         f"""
         <script>
+            const auth_token = "{auth_token}";
+            const token_param = auth_token ? `&auth_token=${{auth_token}}` : "";
+            const show_sidebar_url = `?show_sidebar=1${{token_param}}`;
+            const hide_sidebar_url = `?hide_sidebar=1${{token_param}}`;
+            const isSidebarHidden = {str(bool(st.session_state.get("hide_sidebar"))).lower()};
+
             function ensureSidebarReveal() {{
                 let wrap = document.getElementById("sidebar-reveal-global");
-                if (!wrap) {{
-                    wrap = document.createElement("div");
-                    wrap.id = "sidebar-reveal-global";
-                    wrap.style.position = "fixed";
-                    wrap.style.bottom = "16px";
-                    wrap.style.right = "16px";
-                    wrap.style.zIndex = "9999";
-                    wrap.innerHTML = `
-                        <button id="sidebar-reveal-btn" style="background: rgba(15,23,42,0.75); color:#e5e7eb; border:1px solid rgba(148,163,184,0.6); border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer; backdrop-filter: blur(6px);">Sidebar</button>
-                    `;
-                    document.body.appendChild(wrap);
-                    document.getElementById("sidebar-reveal-btn").onclick = function() {{
-                        window.location.assign("{show_sidebar_url}");
-                    }};
+                if (isSidebarHidden) {{
+                    if (!wrap) {{
+                        wrap = document.createElement("div");
+                        wrap.id = "sidebar-reveal-global";
+                        wrap.style.position = "fixed";
+                        wrap.style.bottom = "16px";
+                        wrap.style.right = "16px";
+                        wrap.style.zIndex = "9999";
+                        wrap.innerHTML = `
+                            <button id="sidebar-reveal-btn" style="background: rgba(15,23,42,0.75); color:#e5e7eb; border:1px solid rgba(148,163,184,0.6); border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer; backdrop-filter: blur(6px);">Sidebar</button>
+                        `;
+                        document.body.appendChild(wrap);
+                        document.getElementById("sidebar-reveal-btn").onclick = function() {{
+                            window.location.assign(show_sidebar_url);
+                        }};
+                    }}
+                }} else if (wrap) {{
+                    wrap.remove();
                 }}
             }}
 
@@ -698,9 +712,19 @@ if hide_sidebar:
             }}
 
             ensureSidebarReveal();
+            
+            // Central hotkey listener
             window.addEventListener('keydown', function(e) {{
-                if (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b')) {{
-                    window.location.assign('{show_sidebar_url}');
+                if (e.ctrlKey && e.key.toLowerCase() === 's') {{
+                    e.preventDefault();
+                    if (isSidebarHidden) {{
+                        window.location.assign(show_sidebar_url);
+                    }} else {{
+                        window.location.assign(hide_sidebar_url);
+                    }}
+                }}
+                if (isSidebarHidden && (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b'))) {{
+                    window.location.assign(show_sidebar_url);
                 }}
             }});
 
@@ -1646,3 +1670,22 @@ if "Admin" in tab_map:
                         rerun()
             else:
                 st.info("No pending requests.")
+
+# Also ensure script is injected when sidebar is visible
+if not st.session_state.get("hide_sidebar"):
+    auth_token = st.session_state.get("auth_token", "")
+    token_param = f"&auth_token={auth_token}" if auth_token else ""
+    hide_sidebar_url = f"?hide_sidebar=1{token_param}"
+    st.markdown(
+        f"""
+        <script>
+            window.addEventListener('keydown', function(e) {{
+                if (e.ctrlKey && e.key.toLowerCase() === 's') {{
+                    e.preventDefault();
+                    window.location.assign("{hide_sidebar_url}");
+                }}
+            }});
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
