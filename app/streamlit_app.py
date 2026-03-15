@@ -104,6 +104,51 @@ def apply_theme(theme_name: str) -> None:
                 border-radius: 9px;
                 border: 1px solid {t["border"]};
             }}
+            [data-testid="stTabList"] {{
+                gap: 8px;
+                background: rgba(15, 23, 42, 0.25);
+                border-radius: 12px;
+                padding: 4px 10px;
+                backdrop-filter: blur(8px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+            }}
+            [data-testid="stTab"] {{
+                height: 38px !important;
+                border-radius: 8px !important;
+                padding: 0 16px !important;
+                color: {t["muted"]} !important;
+                transition: background 0.2s;
+            }}
+            [data-testid="stTab"]:hover {{
+                background: rgba(255, 255, 255, 0.05);
+                color: {t["ink"]} !important;
+            }}
+            [data-testid="stTab"][aria-selected="true"] {{
+                background: {t["accent"]} !important;
+                color: white !important;
+            }}
+            h1 {{
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+                background: rgba(0,0,0,0.2);
+                padding: 4px 12px;
+                border-radius: 8px;
+                display: inline-block;
+            }}
+            .stCaption {{
+                background: rgba(0,0,0,0.4);
+                padding: 2px 8px;
+                border-radius: 4px;
+                color: #f8fafc !important;
+                width: fit-content;
+            }}
+            [data-testid="stFormSubmitButton"] > button {{
+                width: 100%;
+                background-color: {t["accent"]} !important;
+                color: white !important;
+                border: none !important;
+                font-weight: 600 !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+            }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -214,6 +259,7 @@ def _ensure_ui_defaults() -> None:
     st.session_state.setdefault("hide_sidebar", False)
     st.session_state.setdefault("focus_mode", False)
     st.session_state.setdefault("focus_tasks", [])
+    st.session_state.setdefault("sidebar_manual_override", False)
 
 
 def _apply_prefs_to_state(prefs: dict) -> None:
@@ -244,7 +290,8 @@ def _apply_prefs_to_state(prefs: dict) -> None:
     if prefs.get("background_image_pos_y") is not None:
         st.session_state["bg_image_pos_y"] = prefs.get("background_image_pos_y")
     if prefs.get("hide_sidebar") is not None:
-        st.session_state["hide_sidebar"] = prefs.get("hide_sidebar")
+        if not st.session_state.get("sidebar_manual_override"):
+            st.session_state["hide_sidebar"] = prefs.get("hide_sidebar")
 
 
 def _default_prefs_payload() -> dict:
@@ -511,19 +558,70 @@ if "auth_token" in query_params and query_params["auth_token"]:
     st.session_state["auth_token"] = query_params["auth_token"]
     st.query_params.clear()
     rerun()
-if "show_sidebar" in query_params:
-    st.session_state["hide_sidebar"] = False
-    st.query_params.clear()
-    rerun()
-if "hide_sidebar" in query_params:
-    st.session_state["hide_sidebar"] = True
-    st.query_params.clear()
-    rerun()
+
 if "reset_ui" in query_params:
     st.session_state["hide_sidebar"] = False
     st.session_state["reset_ui"] = True
     st.query_params.clear()
     rerun()
+
+if "toggle_sidebar" in query_params:
+    st.session_state["hide_sidebar"] = not st.session_state.get("hide_sidebar", False)
+    st.session_state["sidebar_manual_override"] = True
+    st.query_params.clear()
+    rerun()
+
+# Global Sidebar Toggle Button (Always visible)
+st.markdown(
+    """
+    <div id="sidebar-toggle-btn">☰</div>
+    <style>
+    #sidebar-toggle-btn {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 999999;
+        background: rgba(15, 23, 42, 0.9);
+        color: white;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        border-radius: 8px;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 22px;
+        backdrop-filter: blur(8px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        transition: all 0.2s;
+    }
+    #sidebar-toggle-btn:hover {
+        background: rgba(30, 41, 59, 1);
+        transform: scale(1.05);
+    }
+    </style>
+    <script>
+        (function() {
+            function attachToggle() {
+                const btn = document.getElementById('sidebar-toggle-btn');
+                if (btn && !btn.getAttribute('data-listener-set')) {
+                    btn.setAttribute('data-listener-set', 'true');
+                    btn.addEventListener('click', function() {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('toggle_sidebar', '1');
+                        window.location.assign(url.toString());
+                    });
+                }
+            }
+            // Continuous check to ensure it stays attached across Streamlit's partial re-renders
+            setInterval(attachToggle, 500);
+            attachToggle();
+        })();
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
 
 auth_error_message = None
 if "auth_token" in st.session_state and "user" not in st.session_state:
@@ -597,30 +695,19 @@ if hide_sidebar:
         """
     <style>
         section[data-testid="stSidebar"] {
-            transform: translateX(-100%);
-        }
-        div[data-testid="stSidebarNav"] {
-            display: none;
-        }
-        div[data-testid="stSidebarCollapseButton"] {
-            display: none !important;
-        }
-        header, [data-testid="stToolbar"], [data-testid="stHeader"], [data-testid="stStatusWidget"] {
-            display: none !important;
+            width: 0px !important;
+            min-width: 0px !important;
+            max-width: 0px !important;
+            visibility: hidden !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-right: none !important;
         }
         section.main {
             margin-left: 0 !important;
-            padding: 0 !important;
         }
-        section.main .block-container,
-        .stMainBlockContainer,
-        div[data-testid="stMain"],
-        [data-testid="stAppViewContainer"] > .main {
+        button[data-testid="stSidebarCollapseButton"] {
             display: none !important;
-            opacity: 0 !important;
-            visibility: hidden !important;
-            pointer-events: none !important;
-            height: 0 !important;
         }
     </style>
         """,
@@ -635,35 +722,6 @@ if hide_sidebar:
     st.markdown(
         f"""
         <script>
-            const auth_token = "{auth_token}";
-            const token_param = auth_token ? `&auth_token=${{auth_token}}` : "";
-            const show_sidebar_url = `?show_sidebar=1${{token_param}}`;
-            const hide_sidebar_url = `?hide_sidebar=1${{token_param}}`;
-            const isSidebarHidden = {str(bool(st.session_state.get("hide_sidebar"))).lower()};
-
-            function ensureSidebarReveal() {{
-                let wrap = document.getElementById("sidebar-reveal-global");
-                if (isSidebarHidden) {{
-                    if (!wrap) {{
-                        wrap = document.createElement("div");
-                        wrap.id = "sidebar-reveal-global";
-                        wrap.style.position = "fixed";
-                        wrap.style.bottom = "16px";
-                        wrap.style.right = "16px";
-                        wrap.style.zIndex = "9999";
-                        wrap.innerHTML = `
-                            <button id="sidebar-reveal-btn" style="background: rgba(15,23,42,0.75); color:#e5e7eb; border:1px solid rgba(148,163,184,0.6); border-radius:10px; padding:8px 12px; font-size:13px; cursor:pointer; backdrop-filter: blur(6px);">Sidebar</button>
-                        `;
-                        document.body.appendChild(wrap);
-                        document.getElementById("sidebar-reveal-btn").onclick = function() {{
-                            window.location.assign(show_sidebar_url);
-                        }};
-                    }}
-                }} else if (wrap) {{
-                    wrap.remove();
-                }}
-            }}
-
             function ensureFocusOverlay(tasks) {{
                 let overlay = document.getElementById("focus-overlay");
                 if (!overlay) {{
@@ -710,23 +768,6 @@ if hide_sidebar:
                 if (clock) clock.textContent = `${{hours}}:${{minutes}}`;
                 if (date) date.textContent = now.toDateString();
             }}
-
-            ensureSidebarReveal();
-            
-            // Central hotkey listener
-            window.addEventListener('keydown', function(e) {{
-                if (e.ctrlKey && e.key.toLowerCase() === 's') {{
-                    e.preventDefault();
-                    if (isSidebarHidden) {{
-                        window.location.assign(show_sidebar_url);
-                    }} else {{
-                        window.location.assign(hide_sidebar_url);
-                    }}
-                }}
-                if (isSidebarHidden && (e.key === 's' || (e.ctrlKey && e.key.toLowerCase() === 'b'))) {{
-                    window.location.assign(show_sidebar_url);
-                }}
-            }});
 
             const focusMode = {focus_mode_enabled};
             if (focusMode) {{
@@ -1670,22 +1711,3 @@ if "Admin" in tab_map:
                         rerun()
             else:
                 st.info("No pending requests.")
-
-# Also ensure script is injected when sidebar is visible
-if not st.session_state.get("hide_sidebar"):
-    auth_token = st.session_state.get("auth_token", "")
-    token_param = f"&auth_token={auth_token}" if auth_token else ""
-    hide_sidebar_url = f"?hide_sidebar=1{token_param}"
-    st.markdown(
-        f"""
-        <script>
-            window.addEventListener('keydown', function(e) {{
-                if (e.ctrlKey && e.key.toLowerCase() === 's') {{
-                    e.preventDefault();
-                    window.location.assign("{hide_sidebar_url}");
-                }}
-            }});
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
