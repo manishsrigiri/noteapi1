@@ -18,6 +18,7 @@ class Note(BaseModel):
     category: str = "General"
     tags: List[str] = Field(default_factory=list)
     attachments: List[Attachment] = Field(default_factory=list)
+    author: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

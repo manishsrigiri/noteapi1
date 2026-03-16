@@ -26,6 +26,7 @@ def create_note(
     if collection.find_one({"_id": note.id}):
         raise HTTPException(status_code=400, detail="Note already exists")
     payload = note.model_dump()
+    payload["author"] = user.username
     payload["created_at"] = now_iso()
     payload["updated_at"] = payload["created_at"]
     collection.insert_one(payload | {"_id": note.id})
@@ -184,6 +185,7 @@ def approve_change_request(
     if action == "create":
         if collection.find_one({"_id": payload.get("id")}):
             raise HTTPException(status_code=400, detail="Note already exists")
+        payload["author"] = req.get("requested_by")
         payload["created_at"] = now_iso()
         payload["updated_at"] = payload["created_at"]
         collection.insert_one(payload | {"_id": payload.get("id")})

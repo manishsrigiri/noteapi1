@@ -1234,6 +1234,13 @@ elif current_view == "All Notes":
     with note_list_col:
         st.subheader("All Notes")
         
+        if st.button("+ New Note", type="primary", use_container_width=True):
+            st.session_state["show_create_form"] = True
+            st.session_state["selected_note_id"] = None
+            rerun()
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        
         # Filtering notes based on search text
         filtered_notes = [
             n for n in notes 
@@ -1523,7 +1530,7 @@ elif current_view == "Requests":
 
 elif current_view == "Admin":
     st.subheader("Admin Control Center")
-    admin_tabs = st.tabs(["Users", "Requests", "System"])
+    admin_tabs = st.tabs(["Users", "Requests", "System", "Manage Notes"])
     
     with admin_tabs[0]:
         st.subheader("User Directory")
@@ -1557,6 +1564,21 @@ elif current_view == "Admin":
         st.write("Streamlit Version:", st.__version__)
         if st.button("Download System Logs"):
             st.info("Log download started...")
+
+    with admin_tabs[3]:
+        st.subheader("Manage All Notes")
+        if not notes:
+            st.info("No notes in the system.")
+        else:
+            for note in notes:
+                author_name = note.get('author') or 'Unknown'
+                with st.expander(f"{note.get('title', 'Untitled')} (Author: {author_name}) - {_format_timestamp(note.get('created_at'))}"):
+                    st.write(f"**Category:** {note.get('category', 'General')} | **ID:** {note.get('id', '')}")
+                    st.text(note.get('content', ''))
+                    if st.button("Delete Note", key=f"admin_del_{note.get('id')}"):
+                        _, err = auth_request("DELETE", f"/notes/{note.get('id')}")
+                        if err: st.error(err)
+                        else: st.success("Note deleted"); rerun()
 
 # Final Footer
 st.markdown(
