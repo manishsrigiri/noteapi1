@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 from urllib.parse import quote_plus
 
+import pandas as pd
 import requests
 import streamlit as st
 
@@ -60,6 +61,15 @@ THEMES = {
         "accent_soft": "#d8f3dc",
         "border": "#95d5b2",
     },
+    "Modern": {
+        "bg": "#f8fafc",
+        "surface": "#ffffff",
+        "ink": "#1e293b",
+        "muted": "#64748b",
+        "accent": "#2563eb",
+        "accent_soft": "#eff6ff",
+        "border": "#e2e8f0",
+    },
 }
 
 st.set_page_config(page_title="NoteAPI Studio", layout="wide", initial_sidebar_state="expanded")
@@ -73,81 +83,257 @@ def rerun() -> None:
 
 
 def apply_theme(theme_name: str) -> None:
-    t = THEMES[theme_name]
+    t = THEMES.get(theme_name, THEMES["Light"])
     st.markdown(
         f"""
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            
+            html, body, [data-testid="stAppViewContainer"] {{
+                font-family: 'Inter', sans-serif !important;
+                background-color: {t["bg"]} !important;
+            }}
+            
             .stApp {{
-                background: radial-gradient(circle at top right, {t["accent_soft"]}, {t["bg"]} 40%);
+                background: {t["bg"]};
                 color: {t["ink"]};
             }}
-            section[data-testid="stSidebar"] {{
-                background: linear-gradient(180deg, {t["surface"]} 0%, {t["accent_soft"]} 100%);
-                border-right: 1px solid {t["border"]};
+            
+            /* Top Bar */
+            .top-bar {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 64px;
+                background: {t["surface"]};
+                border-bottom: 1px solid {t["border"]};
+                z-index: 1000000;
+                display: flex;
+                align-items: center;
+                padding: 0 24px;
+                justify-content: space-between;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             }}
-            h1, h2, h3 {{ color: {t["ink"]}; }}
-            .stMetric {{
-                background-color: {t["surface"]};
+            
+            .logo-section {{
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-weight: 700;
+                font-size: 1.25rem;
+                color: {t["ink"]};
+                padding-left: 60px; /* Space for the floating Menu button */
+            }}
+            
+            .search-container {{
+                flex: 1;
+                max-width: 600px;
+                position: absolute;
+                left: 50%;
+                transform: translateX(-50%);
+            }}
+            
+            .search-input {{
+                width: 100%;
+                padding: 10px 16px 10px 42px;
+                border-radius: 20px;
                 border: 1px solid {t["border"]};
-                border-radius: 12px;
-                padding: 8px;
+                background: {t["bg"]};
+                outline: none;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                color: {t["ink"]};
+                box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
             }}
+            
+            .search-input:focus {{
+                border-color: {t["accent"]};
+                box-shadow: 0 0 0 3px {t["accent_soft"]}, inset 0 2px 4px rgba(0,0,0,0.02);
+            }}
+            
+            .nav-icons {{
+                display: flex;
+                align-items: center;
+                gap: 20px;
+                color: {t["muted"]};
+            }}
+            
+            .profile-pic {{
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                background: #e2e8f0;
+                object-fit: cover;
+            }}
+
+            /* Actions Bar */
+            .actions-bar {{
+                margin-top: 64px;
+                padding: 16px 24px;
+                display: flex;
+                justify-content: flex-end;
+                background: transparent;
+            }}
+
+            /* Sidebar Overhaul */
+            section[data-testid="stSidebar"] {{
+                background-color: {t["bg"]} !important;
+                border-right: 1px solid {t["border"]} !important;
+                padding-top: 80px !important;
+            }}
+            
+            [data-testid="stSidebarNav"] {{
+                display: none !important;
+            }}
+            
+            .sidebar-item {{
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 10px 16px;
+                border-radius: 8px;
+                color: {t["muted"]};
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s;
+                margin-bottom: 4px;
+            }}
+            
+            .sidebar-item:hover {{
+                background-color: {t["accent_soft"]};
+                color: {t["accent"]};
+            }}
+            
+            .sidebar-item.active {{
+                background-color: {t["accent_soft"]};
+                color: {t["accent"]};
+                border-left: 4px solid {t["accent"]};
+                border-radius: 0 8px 8px 0;
+            }}
+
+            /* Force Sidebar Width and Visibility */
+            section[data-testid="stSidebar"] {{
+                min-width: 300px !important;
+                max-width: 300px !important;
+                width: 300px !important;
+                transform: none !important;
+                visibility: visible !important;
+                display: flex !important;
+            }}
+            
+            [data-testid="stSidebarCollapseButton"] {{
+                display: none !important;
+            }}
+
+            /* Note Cards */
             .note-card {{
                 background: {t["surface"]};
                 border: 1px solid {t["border"]};
                 border-radius: 12px;
-                padding: 14px;
-                margin-bottom: 12px;
+                padding: 20px;
+                margin-bottom: 16px;
+                transition: box-shadow 0.2s;
+                position: relative;
+                cursor: pointer;
             }}
-            .meta-text {{ color: {t["muted"]}; font-size: 0.90rem; }}
-            div.stButton > button {{
-                border-radius: 9px;
+            
+            .note-card:hover {{
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            }}
+            
+            .note-card.active {{
+                border-color: {t["accent"]};
+                background-color: {t["accent_soft"]};
+            }}
+            
+            .note-title {{ font-weight: 600; font-size: 1rem; color: {t["ink"]}; margin-bottom: 4px; }}
+            .note-meta {{ font-size: 0.85rem; color: {t["muted"]}; display: flex; justify-content: space-between; align-items: center; }}
+            .tag {{ 
+                padding: 2px 8px; 
+                border-radius: 4px; 
+                font-size: 0.75rem; 
+                font-weight: 600; 
+                background: {t["bg"]}; 
+                color: {t["muted"]};
+            }}
+
+            /* Editor Area */
+            .editor-container {{
+                background: {t["surface"]};
                 border: 1px solid {t["border"]};
-            }}
-            [data-testid="stTabList"] {{
-                gap: 8px;
-                background: rgba(15, 23, 42, 0.25);
                 border-radius: 12px;
-                padding: 4px 10px;
-                backdrop-filter: blur(8px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 24px;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
             }}
-            [data-testid="stTab"] {{
-                height: 38px !important;
-                border-radius: 8px !important;
-                padding: 0 16px !important;
-                color: {t["muted"]} !important;
-                transition: background 0.2s;
+            
+            .editor-header {{ font-size: 1.5rem; font-weight: 700; color: {t["ink"]}; margin-bottom: 20px; }}
+            
+            /* Streamlit Overrides - Premium Polish */
+            div.stButton > button {{
+                border-radius: 10px;
+                font-weight: 600;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                border: 1px solid {t["border"]};
+                background-color: {t["surface"]};
+                color: {t["ink"]};
             }}
-            [data-testid="stTab"]:hover {{
-                background: rgba(255, 255, 255, 0.05);
-                color: {t["ink"]} !important;
+            
+            div.stButton > button:hover {{
+                border-color: {t["accent"]};
+                color: {t["accent"]};
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             }}
-            [data-testid="stTab"][aria-selected="true"] {{
-                background: {t["accent"]} !important;
-                color: white !important;
-            }}
-            h1 {{
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-                background: rgba(0,0,0,0.2);
-                padding: 4px 12px;
-                border-radius: 8px;
-                display: inline-block;
-            }}
-            .stCaption {{
-                background: rgba(0,0,0,0.4);
-                padding: 2px 8px;
-                border-radius: 4px;
-                color: #f8fafc !important;
-                width: fit-content;
-            }}
-            [data-testid="stFormSubmitButton"] > button {{
-                width: 100%;
+            
+            .new-note-btn > div > button {{
                 background-color: {t["accent"]} !important;
                 color: white !important;
                 border: none !important;
-                font-weight: 600 !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+                padding: 10px 24px !important;
+                box-shadow: 0 4px 14px {t["accent_soft"]} !important;
+            }}
+            
+            .save-btn > div > button {{
+                background-color: #10b981 !important; /* Emerald 500 */
+                color: white !important;
+                border: none !important;
+                padding: 8px 24px !important;
+            }}
+
+            .save-btn > div > button:hover {{
+                background-color: #059669 !important; /* Emerald 600 */
+                box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3) !important;
+            }}
+            
+            .delete-btn > div > button {{
+                background-color: #ef4444 !important; /* Red 500 */
+                color: white !important;
+                border: none !important;
+                padding: 8px 24px !important;
+            }}
+
+            .delete-btn > div > button:hover {{
+                background-color: #dc2626 !important; /* Red 600 */
+                box-shadow: 0 4px 14px rgba(239, 68, 68, 0.3) !important;
+            }}
+
+            /* Better contrast for inputs */
+            div[data-testid="stTextInput"] input, div[data-testid="stTextArea"] textarea {{
+                background-color: {t["surface"]} !important;
+                color: {t["ink"]} !important;
+                border: 1px solid {t["border"]} !important;
+                border-radius: 10px !important;
+            }}
+
+            /* Hide default streamlit elements */
+            header, [data-testid="stHeader"] {{
+                background: transparent !important;
+            }}
+            
+            #MainMenu, footer, [data-testid="stToolbar"] {{
+                visibility: hidden;
             }}
         </style>
         """,
@@ -191,7 +377,8 @@ def apply_background(
             "background-repeat: no-repeat !important;"
             "background-attachment: fixed !important;"
             "background-color: transparent !important;"
-            "image-rendering: auto !important;"
+            "image-rendering: -webkit-optimize-contrast !important;"
+            "image-rendering: crisp-edges !important;"
         )
     else:
         return
@@ -559,70 +746,147 @@ if "auth_token" in query_params and query_params["auth_token"]:
     st.query_params.clear()
     rerun()
 
-if "reset_ui" in query_params:
-    st.session_state["hide_sidebar"] = False
-    st.session_state["reset_ui"] = True
+if "tgl_sb" in query_params or "tgl_sb_on" in query_params or "tgl_sb_off" in query_params:
+    if "tgl_sb" in query_params:
+        st.session_state["hide_sidebar"] = not st.session_state.get("hide_sidebar", False)
+        # If showing sidebar while in "Clear" view, switch to Dashboard
+        if not st.session_state["hide_sidebar"] and st.session_state.get("current_view") == "Clear":
+            st.session_state["current_view"] = "Dashboard"
+    elif "tgl_sb_on" in query_params:
+        st.session_state["hide_sidebar"] = True
+    elif "tgl_sb_off" in query_params:
+        st.session_state["hide_sidebar"] = False
+        if st.session_state.get("current_view") == "Clear":
+            st.session_state["current_view"] = "Dashboard"
     st.query_params.clear()
     rerun()
 
-if "toggle_sidebar" in query_params:
-    st.session_state["hide_sidebar"] = not st.session_state.get("hide_sidebar", False)
-    st.session_state["sidebar_manual_override"] = True
-    st.query_params.clear()
-    rerun()
 
-# Global Sidebar Toggle Button (Always visible)
+# ---------------------------------------------------------
+# GLOBAL UI & THEME (Applied to login & dashboard)
+# ---------------------------------------------------------
+_ensure_ui_defaults()
+theme = st.session_state.get("theme_name", "Dark")
+apply_theme(theme)
+
+# Force the search query state
+st.session_state.setdefault("search_query", "")
+
+# Premium Sidebar Toggle and Top Bar
 st.markdown(
-    """
-    <div id="sidebar-toggle-btn">☰</div>
+    f"""
+    <div id="sb-toggle-btn">
+        <span class="sb-icon">☰</span>
+        <span class="sb-text">Menu</span>
+    </div>
     <style>
-    #sidebar-toggle-btn {
+    #sb-toggle-btn {{
         position: fixed;
-        top: 12px;
-        left: 12px;
-        z-index: 999999;
-        background: rgba(15, 23, 42, 0.9);
-        color: white;
-        border: 1px solid rgba(148, 163, 184, 0.4);
-        border-radius: 8px;
-        width: 40px;
-        height: 40px;
+        top: 18px;
+        left: 18px;
+        z-index: 99999999;
+        background: {THEMES[theme]["surface"]};
+        color: {THEMES[theme]["ink"]};
+        border: 1px solid {THEMES[theme]["border"]};
+        border-radius: 40px;
+        padding: 0 16px;
+        height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 10px;
         cursor: pointer;
-        font-size: 22px;
-        backdrop-filter: blur(8px);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        transition: all 0.2s;
-    }
-    #sidebar-toggle-btn:hover {
-        background: rgba(30, 41, 59, 1);
-        transform: scale(1.05);
-    }
+        font-size: 16px;
+        font-weight: 600;
+        backdrop-filter: blur(12px);
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        user-select: none;
+    }}
+    #sb-toggle-btn:hover {{
+        transform: translateY(-2px);
+        border-color: {THEMES[theme]["accent"]};
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }}
+    .sb-icon {{ font-size: 18px; }}
+    
+    /* Hide logic for Zen Mode / Hidden Sidebar */
+    {'''
+    .top-bar, [data-testid="stSidebar"], [data-testid="stHeader"], section.main > div:first-child {{
+        display: none !important;
+    }}
+    section.main {{
+        background: transparent !important;
+    }}
+    ''' if st.session_state.get("hide_sidebar") else ''}
     </style>
     <script>
-        (function() {
-            function attachToggle() {
-                const btn = document.getElementById('sidebar-toggle-btn');
-                if (btn && !btn.getAttribute('data-listener-set')) {
-                    btn.setAttribute('data-listener-set', 'true');
-                    btn.addEventListener('click', function() {
-                        const url = new URL(window.location.href);
-                        url.searchParams.set('toggle_sidebar', '1');
-                        window.location.assign(url.toString());
-                    });
-                }
-            }
-            // Continuous check to ensure it stays attached across Streamlit's partial re-renders
-            setInterval(attachToggle, 500);
-            attachToggle();
-        })();
+        (function() {{
+            const btn = document.getElementById('sb-toggle-btn');
+            if (btn) {{
+                btn.onclick = function() {{
+                    const win = window.parent || window;
+                    try {{
+                        const url = new URL(win.location.href);
+                        url.searchParams.set('tgl_sb', Date.now());
+                        win.location.search = url.search;
+                    }} catch(e) {{
+                        const url2 = new URL(window.location.href);
+                        url2.searchParams.set('tgl_sb', Date.now());
+                        window.location.search = url2.search;
+                    }}
+                }};
+                // Move to body to persist even when container is hidden
+                if (btn.parentElement !== document.body) {{
+                    const existing = document.body.querySelector('#sb-toggle-btn');
+                    if (existing && existing !== btn) existing.remove();
+                    document.body.appendChild(btn);
+                }}
+            }}
+        }})();
+    </script>
+    <div class="top-bar">
+        <div class="logo-section" style="padding-left: 90px;">
+            <span style="font-size: 24px;">📋</span> NoteApp
+        </div>
+        <div class="search-container">
+            <span style="position: absolute; left: 12px; top: 10px; color: #94a3b8;">🔍</span>
+            <input type="text" id="top-search-input" class="search-input" placeholder="Search notes..." value="{st.session_state["search_query"]}">
+        </div>
+        <div class="nav-icons">
+            <span style="font-size: 20px; cursor: pointer;">🔔</span>
+            <span style="font-size: 20px; cursor: pointer;">💬</span>
+            <img src="https://ui-avatars.com/api/?name={st.session_state.get('user', {}).get('display_name', 'User')}&background=random" class="profile-pic">
+        </div>
+    </div>
+    <script>
+        (function() {{
+            const input = document.getElementById('top-search-input');
+            if (input) {{
+                input.addEventListener('keydown', function(e) {{
+                    if (e.key === 'Enter') {{
+                        const stInput = window.parent.document.querySelector('input[aria-label="hidden_search_input"]');
+                        if (stInput) {{
+                            stInput.value = this.value;
+                            stInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            stInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        }}
+                    }}
+                }});
+            }}
+        }})();
     </script>
     """,
     unsafe_allow_html=True,
 )
 
+# Hidden search for state sync
+with st.container():
+    st.markdown('<div style="display:none">', unsafe_allow_html=True)
+    st.text_input("hidden_search_input", key="search_query", label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Auth and Initialization
 auth_error_message = None
 if "auth_token" in st.session_state and "user" not in st.session_state:
     me, me_error = auth_request("GET", "/auth/me")
@@ -632,97 +896,66 @@ if "auth_token" in st.session_state and "user" not in st.session_state:
     else:
         st.session_state["user"] = me
 
-st.sidebar.title("Control Room")
-
 if "user" not in st.session_state:
     render_login_page(auth_error_message)
     st.stop()
 
-_ensure_ui_defaults()
+# ---------------------------------------------------------
+# LOGGED IN FLOW - LOAD PREFERENCES
+# ---------------------------------------------------------
 if "prefs_loaded" not in st.session_state:
     prefs_payload, prefs_error = auth_request("GET", "/auth/preferences")
     if prefs_payload and not prefs_error:
         _apply_prefs_to_state(prefs_payload)
     st.session_state["prefs_loaded"] = True
+
 if st.session_state.pop("reset_ui", False):
     _reset_preferences()
     st.session_state["prefs_loaded"] = False
+    rerun()
     rerun()
 if "bg_mode_next" in st.session_state:
     st.session_state["bg_mode"] = st.session_state.pop("bg_mode_next")
 
 theme_options = list(THEMES.keys())
 theme = st.sidebar.selectbox("Theme", theme_options, key="theme_name")
-apply_theme(theme)
+# apply_theme(theme) # Already applied at top level
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Layout")
-hide_sidebar = st.sidebar.toggle("Hide sidebar", value=st.session_state["hide_sidebar"], key="hide_sidebar")
-focus_mode = st.sidebar.toggle("Focus mode (clock + today)", value=st.session_state["focus_mode"], key="focus_mode")
-sleep_cols = st.sidebar.columns([1, 1])
-with sleep_cols[0]:
-    if st.button("Sleep mode", key="sleep_mode_btn"):
-        st.session_state["hide_sidebar"] = True
-        st.session_state["focus_mode"] = True
-        rerun()
-with sleep_cols[1]:
-    if st.button("Exit sleep", key="sleep_mode_exit_btn"):
-        st.session_state["hide_sidebar"] = False
-        st.session_state["focus_mode"] = False
-        rerun()
-if focus_mode and not hide_sidebar:
-    st.sidebar.caption("Today's tasks")
-    task_text = st.sidebar.text_input("Task", key="focus_task_input")
-    if st.sidebar.button("Add task"):
-        cleaned = task_text.strip()
-        if cleaned:
-            st.session_state["focus_tasks"] = st.session_state.get("focus_tasks", []) + [cleaned]
-            st.session_state["focus_task_input"] = ""
-            rerun()
-    tasks = st.session_state.get("focus_tasks", [])
-    if tasks:
-        remove_idx = st.sidebar.selectbox(
-            "Remove task",
-            list(range(len(tasks))),
-            format_func=lambda i: tasks[i],
-            key="focus_remove_idx",
-        )
-        if st.sidebar.button("Remove selected task"):
-            st.session_state["focus_tasks"] = [t for i, t in enumerate(tasks) if i != remove_idx]
-            rerun()
-if hide_sidebar:
+# Sidebar layout cleaned up - removed Focus/Sleep/Hide toggles
+st.sidebar.markdown(f"### Welcome, {st.session_state['user'].get('display_name' or 'username', 'User')}!")
+if st.session_state.get("hide_sidebar"):
     st.markdown(
         """
     <style>
-        section[data-testid="stSidebar"] {
-            width: 0px !important;
-            min-width: 0px !important;
-            max-width: 0px !important;
-            visibility: hidden !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border-right: none !important;
-        }
-        section.main {
-            margin-left: 0 !important;
-        }
-        button[data-testid="stSidebarCollapseButton"] {
+        section[data-testid="stSidebar"] {{
             display: none !important;
-        }
+            width: 0 !important;
+        }}
+        [data-testid="stSidebarContent"] {{
+            display: none !important;
+        }}
+        section.main {{
+            margin-left: 0 !important;
+            width: 100% !important;
+        }}
+        [data-testid="stSidebarCollapseButton"] {{
+            display: none !important;
+        }}
     </style>
         """,
         unsafe_allow_html=True,
     )
-    auth_token = st.session_state.get("auth_token", "")
-    token_param = f"&auth_token={auth_token}" if auth_token else ""
-    show_sidebar_url = f"?show_sidebar=1{token_param}"
-    reset_ui_url = f"?reset_ui=1{token_param}"
-    tasks_json = json.dumps(st.session_state.get("focus_tasks", []))
-    focus_mode_enabled = str(bool(st.session_state.get("focus_mode"))).lower()
-    st.markdown(
-        f"""
-        <script>
-            function ensureFocusOverlay(tasks) {{
+
+auth_token = st.session_state.get("auth_token", "")
+token_param = f"&auth_token={auth_token}" if auth_token else ""
+show_sidebar_url = f"?show_sidebar=1{token_param}"
+reset_ui_url = f"?reset_ui=1{token_param}"
+tasks_json = json.dumps(st.session_state.get("focus_tasks", []))
+focus_mode_enabled = str(bool(st.session_state.get("focus_mode"))).lower()
+st.markdown(
+    f"""
+    <script>
+        function ensureFocusOverlay(tasks) {{
                 let overlay = document.getElementById("focus-overlay");
                 if (!overlay) {{
                     overlay = document.createElement("div");
@@ -783,145 +1016,22 @@ if hide_sidebar:
         unsafe_allow_html=True,
     )
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Background")
-bg_mode = st.sidebar.selectbox(
-    "Background style",
-    ["Theme Default", "Solid", "Gradient", "Image"],
-    key="bg_mode",
-)
-bg_solid = st.session_state.get("bg_solid")
-bg_grad_start = st.session_state.get("bg_grad_start")
-bg_grad_end = st.session_state.get("bg_grad_end")
-bg_grad_dir = st.session_state.get("bg_grad_dir")
-bg_image_fit = st.session_state.get("bg_image_fit")
-bg_image_scale = st.session_state.get("bg_image_scale")
-bg_image_pos_x = st.session_state.get("bg_image_pos_x")
-bg_image_pos_y = st.session_state.get("bg_image_pos_y")
 
-if bg_mode == "Solid":
-    bg_solid = st.sidebar.color_picker("Solid color", key="bg_solid")
-elif bg_mode == "Gradient":
-    bg_grad_start = st.sidebar.color_picker("Gradient start", key="bg_grad_start")
-    bg_grad_end = st.sidebar.color_picker("Gradient end", key="bg_grad_end")
-    bg_grad_dir = st.sidebar.selectbox(
-        "Gradient direction",
-        ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
-        key="bg_grad_dir",
-    )
-elif bg_mode == "Image":
-    st.sidebar.markdown("**Background gallery**")
-    bg_uploads = st.sidebar.file_uploader(
-        "Add images",
-        type=["png", "jpg", "jpeg"],
-        accept_multiple_files=True,
-        key="bg_gallery_uploads",
-    )
-    if st.sidebar.button("Add to gallery"):
-        gallery = list(st.session_state.get("bg_gallery", []))
-        for upload in bg_uploads or []:
-            raw = upload.read()
-            if not raw:
-                continue
-            if len(raw) > 1_500_000:
-                st.sidebar.warning(f"{upload.name} is too large. Keep images under 1.5MB.")
-                continue
-            b64 = base64.b64encode(raw).decode("ascii")
-            gallery.append(
-                {
-                    "id": uuid.uuid4().hex[:12],
-                    "name": upload.name,
-                    "content_type": upload.type or "image/png",
-                    "data_b64": b64,
-                }
-            )
-        st.session_state["bg_gallery"] = gallery[:8]
-        if gallery and st.session_state.get("bg_image_id") is None:
-            st.session_state["bg_image_id"] = gallery[0]["id"]
-            rerun()
+# Background logic - kept global but controlled via Appearance view
+bg_mode = st.session_state.get("bg_mode", "Theme Default")
+bg_solid = st.session_state.get("bg_solid", "#f8fafc")
+bg_grad_start = st.session_state.get("bg_grad_start", "#f8fafc")
+bg_grad_end = st.session_state.get("bg_grad_end", "#e2e8f0")
+bg_grad_dir = st.session_state.get("bg_grad_dir", "to bottom right")
+bg_image_id = st.session_state.get("bg_image_id")
+bg_image_fit = st.session_state.get("bg_image_fit", "Cover")
+bg_image_scale = st.session_state.get("bg_image_scale", 100)
+bg_image_pos_x = st.session_state.get("bg_image_pos_x", 50)
+bg_image_pos_y = st.session_state.get("bg_image_pos_y", 50)
 
-    gallery_items = st.session_state.get("bg_gallery", [])
-    if gallery_items:
-        ids = [item.get("id") for item in gallery_items]
-        if st.session_state.get("bg_image_id") not in ids:
-            st.session_state["bg_image_id"] = ids[0]
-            rerun()
-        selected_id = st.sidebar.radio(
-            "Select background",
-            ids,
-            index=ids.index(st.session_state.get("bg_image_id")) if st.session_state.get("bg_image_id") in ids else 0,
-            format_func=lambda i: next((item.get("name", "image") for item in gallery_items if item.get("id") == i), "image"),
-        )
-        st.session_state["bg_image_id"] = selected_id
-        remove_selected = st.sidebar.button("Remove selected")
-        selected_item = next((item for item in gallery_items if item.get("id") == selected_id), None)
-        if selected_item:
-            try:
-                preview_data = base64.b64decode(selected_item.get("data_b64", ""))
-            except (ValueError, TypeError):
-                preview_data = b""
-            if preview_data:
-                st.sidebar.image(preview_data, caption=selected_item.get("name", "Background"), use_container_width=True)
-        if remove_selected:
-            st.session_state["bg_gallery"] = [item for item in gallery_items if item.get("id") != selected_id]
-            if st.session_state.get("bg_image_id") == selected_id:
-                st.session_state["bg_image_id"] = None
-            rerun()
-    else:
-        st.sidebar.info("Upload an image to use it as the background.")
+bg_image_b64 = _current_bg_image_b64() if bg_mode == "Image" else None
+bg_image_type = _current_bg_content_type() if bg_mode == "Image" else None
 
-    if st.session_state.get("bg_image_id"):
-        bg_image_fit = st.sidebar.selectbox(
-            "Image fit",
-            ["Cover", "Contain", "Actual"],
-            key="bg_image_fit",
-        )
-        st.sidebar.markdown("**Zoom**")
-        zoom_cols = st.sidebar.columns(3)
-        with zoom_cols[0]:
-            if st.button("−", key="bg_zoom_out"):
-                st.session_state["bg_image_scale"] = max(50, st.session_state["bg_image_scale"] - 10)
-                rerun()
-        with zoom_cols[1]:
-            if st.button("Reset", key="bg_zoom_reset"):
-                st.session_state["bg_image_scale"] = 100
-                rerun()
-        with zoom_cols[2]:
-            if st.button("+", key="bg_zoom_in"):
-                st.session_state["bg_image_scale"] = min(200, st.session_state["bg_image_scale"] + 10)
-                rerun()
-        bg_image_scale = st.sidebar.slider("Image scale (%)", 50, 200, key="bg_image_scale")
-
-        st.sidebar.markdown("**Image position**")
-        pos_step = st.sidebar.select_slider("Step size", options=[1, 2, 5, 10], value=5)
-        pos_cols = st.sidebar.columns(3)
-        with pos_cols[0]:
-            if st.button("◀", key="bg_pos_left"):
-                st.session_state["bg_image_pos_x"] = max(0, st.session_state["bg_image_pos_x"] - pos_step)
-                rerun()
-        with pos_cols[1]:
-            if st.button("▲", key="bg_pos_up"):
-                st.session_state["bg_image_pos_y"] = max(0, st.session_state["bg_image_pos_y"] - pos_step)
-                rerun()
-        with pos_cols[2]:
-            if st.button("▶", key="bg_pos_right"):
-                st.session_state["bg_image_pos_x"] = min(100, st.session_state["bg_image_pos_x"] + pos_step)
-                rerun()
-        pos_cols = st.sidebar.columns(3)
-        with pos_cols[1]:
-            if st.button("▼", key="bg_pos_down"):
-                st.session_state["bg_image_pos_y"] = min(100, st.session_state["bg_image_pos_y"] + pos_step)
-                rerun()
-        st.sidebar.caption(
-            f"X: {st.session_state['bg_image_pos_x']}%  Y: {st.session_state['bg_image_pos_y']}%"
-        )
-        bg_image_pos_x = st.session_state["bg_image_pos_x"]
-        bg_image_pos_y = st.session_state["bg_image_pos_y"]
-
-bg_image_b64 = _current_bg_image_b64() if st.session_state.get("bg_mode") == "Image" else None
-bg_image_type = _current_bg_content_type() if st.session_state.get("bg_mode") == "Image" else None
-if st.session_state.get("bg_mode") == "Image" and not bg_image_b64:
-    st.sidebar.warning("Select a background image from the gallery to apply it.")
 apply_background(
     bg_mode,
     bg_solid,
@@ -936,365 +1046,342 @@ apply_background(
     bg_image_pos_y,
 )
 
-if st.sidebar.button("Save appearance"):
-    prefs_payload = {
-        "theme": st.session_state.get("theme_name"),
-        "background_mode": st.session_state.get("bg_mode"),
-        "background_solid": st.session_state.get("bg_solid"),
-        "background_gradient_start": st.session_state.get("bg_grad_start"),
-        "background_gradient_end": st.session_state.get("bg_grad_end"),
-        "background_gradient_dir": st.session_state.get("bg_grad_dir"),
-        "background_image_id": st.session_state.get("bg_image_id"),
-        "background_image_fit": st.session_state.get("bg_image_fit"),
-        "background_image_scale": st.session_state.get("bg_image_scale"),
-        "background_image_pos_x": st.session_state.get("bg_image_pos_x"),
-        "background_image_pos_y": st.session_state.get("bg_image_pos_y"),
-        "backgrounds": st.session_state.get("bg_gallery", []),
-        "hide_sidebar": st.session_state.get("hide_sidebar"),
-    }
-    _, pref_error = auth_request("PUT", "/auth/preferences", payload=prefs_payload)
-    if pref_error:
-        st.sidebar.error(pref_error)
-    else:
-        st.sidebar.success("Appearance saved.")
-
 user_role = st.session_state["user"].get("role", "client")
 can_edit = st.session_state["user"].get("is_admin", False) or user_role in {"client", "editor", "admin", "viewer"}
 
-st.sidebar.success(f"Signed in as {st.session_state['user'].get('username', 'user')}")
-if st.sidebar.button("Logout"):
+st.sidebar.info(f"Role: {st.session_state['user'].get('role', 'user')}")
+if st.sidebar.button("Logout", use_container_width=True):
     auth_request("POST", "/auth/logout")
-    st.session_state.pop("auth_token", None)
-    st.session_state.pop("user", None)
-    st.session_state.pop("prefs_loaded", None)
-    st.session_state.pop("theme_name", None)
-    st.session_state.pop("bg_mode", None)
-    st.session_state.pop("bg_solid", None)
-    st.session_state.pop("bg_grad_start", None)
-    st.session_state.pop("bg_grad_end", None)
-    st.session_state.pop("bg_grad_dir", None)
-    st.session_state.pop("bg_gallery", None)
-    st.session_state.pop("bg_image_id", None)
-    st.session_state.pop("bg_image_fit", None)
-    st.session_state.pop("bg_image_scale", None)
-    st.session_state.pop("bg_image_pos_x", None)
-    st.session_state.pop("bg_image_pos_y", None)
-    st.session_state.pop("hide_sidebar", None)
-    st.warning("You have been logged out.")
+    st.session_state.clear()
+    rerun()
     st.stop()
 
-if st.session_state["user"].get("is_admin", False):
-    session_stats, session_stats_error = auth_request("GET", "/auth/session-stats")
-    if session_stats and not session_stats_error:
-        st.sidebar.metric("Logged-in Users", session_stats.get("logged_in_users", 0))
-        st.sidebar.metric("Active Sessions", session_stats.get("active_sessions", 0))
-
-    with st.sidebar.expander("Session Details", expanded=False):
-        sessions_payload, sessions_error = auth_request("GET", "/auth/sessions?include_inactive=true")
-        if sessions_error:
-            st.error(sessions_error)
-        else:
-            sessions = sessions_payload.get("sessions", [])
-            for session in sessions:
-                session["duration"] = _format_duration(session.get("duration_seconds"))
-            search_user = st.text_input("Search user activity")
-            if search_user.strip():
-                needle = search_user.strip().lower()
-                sessions = [s for s in sessions if needle in s.get("username", "").lower()]
-            session_rows = [
-                {
-                    "logout": False,
-                    "token": s.get("token", ""),
-                    "username": s.get("username", ""),
-                    "active": s.get("is_active", False),
-                    "login_at": s.get("created_at", ""),
-                    "last_seen": s.get("last_seen", ""),
-                    "logout_at": s.get("logged_out_at", ""),
-                    "duration": s.get("duration", ""),
-                }
-                for s in sessions
-            ]
-            edited = st.data_editor(
-                session_rows,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "logout": st.column_config.CheckboxColumn("Logout"),
-                    "token": st.column_config.TextColumn("Token"),
-                },
-                disabled=[
-                    "token",
-                    "username",
-                    "active",
-                    "login_at",
-                    "last_seen",
-                    "logout_at",
-                    "duration",
-                ],
-            )
-
-            logout_tokens = [row["token"] for row in edited if row.get("logout") and row.get("token")]
-            if st.button("Logout Selected"):
-                if not logout_tokens:
-                    st.info("Select at least one session to logout.")
-                else:
-                    total_updated = 0
-                    for token in logout_tokens:
-                        result, error = auth_request(
-                            "POST",
-                            "/auth/sessions/logout",
-                            payload={"token": token},
-                        )
-                        if error:
-                            st.error(f"{token}: {error}")
-                        else:
-                            total_updated += result.get("updated", 0)
-                    st.success(f"Logged out sessions: {total_updated}")
-                    rerun()
-
+# Main App Start (Cleaned sidebar items)
 stats, stats_error = api_request("GET", "stats")
 notes, notes_error = api_request("GET")
 if notes_error:
     notes = []
 
-if st.sidebar.button("Refresh Data"):
+if st.sidebar.button("Refresh Data", use_container_width=True):
     rerun()
-
-if stats and not stats_error:
-    st.sidebar.metric("Total IDs", stats.get("total_ids", 0))
-    st.sidebar.metric("Pinned IDs", stats.get("pinned_ids", 0))
-    st.sidebar.metric("Private IDs", stats.get("private_ids", 0))
-    st.sidebar.metric("Public IDs", stats.get("public_ids", 0))
-else:
-    st.sidebar.warning(stats_error or "Could not load stats")
-
-st.title("NoteAPI Studio")
-role_label = "Admin" if st.session_state["user"].get("is_admin", False) else user_role.title()
-st.caption(f"Role: {role_label}")
-st.caption("Presentation-ready notes dashboard with privacy controls, pinning, and analytics.")
 
 if notes_error:
     st.error(notes_error)
 
-tab_labels = ["Dashboard"]
-if can_edit:
-    tab_labels.append("Create")
-tab_labels.append("Library")
-tab_labels.append("Requests")
-if can_edit:
-    tab_labels.append("Manage")
+if "current_view" not in st.session_state:
+    st.session_state["current_view"] = "All Notes"
+
+# Custom Sidebar Navigation
+st.sidebar.markdown('<div style="padding-bottom: 20px;"></div>', unsafe_allow_html=True)
+
+def sidebar_nav_item(label, icon, key):
+    is_active = st.session_state["current_view"] == label
+    active_class = "active" if is_active else ""
+    if st.sidebar.button(f"{icon} {label}", key=f"nav_{key}", use_container_width=True):
+        st.session_state["current_view"] = label
+        if label == "Clear":
+            st.session_state["hide_sidebar"] = True
+        rerun()
+
+sidebar_nav_item("Dashboard", "📊", "dash")
+sidebar_nav_item("All Notes", "📑", "all")
+sidebar_nav_item("Favorites", "⭐", "fav")
+sidebar_nav_item("Archived", "📁", "arch")
+sidebar_nav_item("Trash", "🗑️", "trash")
+sidebar_nav_item("Appearance", "🎨", "appear")
+sidebar_nav_item("Clear", "✨", "clear")
+
+st.sidebar.markdown("---")
+# Preserve existing secondary views
 if st.session_state["user"].get("is_admin", False):
-    tab_labels.append("Admin")
-tabs = st.tabs(tab_labels)
-tab_map = dict(zip(tab_labels, tabs))
+    sidebar_nav_item("Admin", "🛡️", "admin")
+sidebar_nav_item("Requests", "✉️", "req")
+if can_edit:
+    sidebar_nav_item("Manage", "⚙️", "manage")
 
-with tab_map["Dashboard"]:
-    st.subheader("Live Overview")
-    total = len(notes)
-    pinned = sum(1 for note in notes if note.get("pinned"))
-    private = sum(1 for note in notes if note.get("is_private"))
-    public = total - private
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Notes", total)
-    col2.metric("Pinned", pinned)
-    col3.metric("Private", private)
-    col4.metric("Public", public)
+# Hidden native toggle for the custom header button
+st.sidebar.markdown(
+    '<div style="display:none;" id="native-toggle-wrapper">', 
+    unsafe_allow_html=True
+)
+if st.sidebar.button("INTERNAL_TOGGLE", key="sidebar_internal_toggle_btn"):
+    # Use query parameter to toggle state at the top of the script
+    # This avoids StreamlitAPIException regarding modifying state after widget instantiation
+    st.query_params["tgl_sb"] = str(datetime.now().timestamp())
+    rerun()
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-    category_data = {}
-    for note in notes:
-        category = note.get("category", "General") or "General"
-        category_data[category] = category_data.get(category, 0) + 1
-    if category_data:
-        st.subheader("Category Distribution")
-        st.bar_chart(category_data)
+current_view = st.session_state["current_view"]
 
-    st.subheader("Export Snapshot")
-    st.download_button(
-        label="Download Notes JSON",
-        data=json.dumps(notes, indent=2),
-        file_name="notes_snapshot.json",
-        mime="application/json",
-    )
+# Handle specialized views
+if current_view == "Favorites":
+    notes = [n for n in notes if n.get("pinned")]
+    current_view = "All Notes"
+elif current_view == "Archived":
+    notes = [n for n in notes if n.get("category") == "Archived"]
+    current_view = "All Notes"
+elif current_view == "Trash":
+    notes = [n for n in notes if n.get("category") == "Trash"]
+    current_view = "All Notes"
 
-if "Create" in tab_map:
-    with tab_map["Create"]:
-        st.subheader("Create a New Note")
-        with st.form("create_note_form"):
-            col1, col2 = st.columns(2)
-            note_id = col1.text_input("Note ID")
-            title = col2.text_input("Title")
-            col3, col4 = st.columns(2)
-            category = col3.text_input("Category", value="General")
-            tags_raw = col4.text_input("Tags (comma separated)")
-            content = st.text_area("Content", height=180)
-            attachments = st.file_uploader("Attachments", accept_multiple_files=True)
-            c1, c2 = st.columns(2)
-            pinned = c1.checkbox("Pin this note")
-            is_private = c2.checkbox("Mark as private")
-            submitted = st.form_submit_button("Create Note")
+# Use custom search input
+search_text = st.session_state.get("search_query", "").lower()
 
-        if submitted:
-            payload = {
-                "id": note_id.strip(),
-                "title": title.strip(),
-                "content": content.strip(),
-                "pinned": pinned,
-                "is_private": is_private,
-                "category": category.strip() or "General",
-                "tags": parse_tags(tags_raw),
-                "attachments": _encode_attachments(attachments),
-            }
-            result, err = api_request("POST", "", payload=payload)
-            if err:
-                st.error(err)
-            else:
-                st.success(result.get("message", "Note created"))
+# View Switcher Main Logic
+if current_view == "Clear":
+    st.empty() 
+elif current_view == "Dashboard":
+    st.subheader("Dashboard Overview")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Notes", len(notes))
+    m2.metric("Pinned", sum(1 for n in notes if n.get("pinned")))
+    m3.metric("Private", sum(1 for n in notes if n.get("is_private")))
+    m4.metric("Collections", len(set(n.get("category") for n in notes)))
+    
+    st.divider()
+    st.subheader("Activity")
+    # Simple bar chart of notes by category
+    cat_counts = {}
+    for n in notes:
+        c = n.get("category", "General") or "General"
+        cat_counts[c] = cat_counts.get(c, 0) + 1
+    if cat_counts:
+        st.bar_chart(cat_counts)
+        st.dataframe(pd.DataFrame(list(cat_counts.items()), columns=["Category", "Count"]), hide_index=True)
+    else:
+        st.info("No categorical data to display.")
+
+elif current_view == "Appearance":
+    st.subheader("Appearance & Visual Settings")
+    st.write("Customize your workspace look and feel.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### Theme Selection")
+        theme_options = list(THEMES.keys())
+        theme_idx = theme_options.index(st.session_state.get("theme_name", "Dark"))
+        new_theme = st.selectbox("Active Theme", theme_options, index=theme_idx)
+        if new_theme != st.session_state.get("theme_name"):
+            st.session_state["theme_name"] = new_theme
+            rerun()
+        
+        st.markdown("### Background Mode")
+        bg_options = ["Theme Default", "Solid", "Gradient", "Image"]
+        new_bg_mode = st.selectbox("Background Style", bg_options, index=bg_options.index(st.session_state.get("bg_mode", "Theme Default")))
+        if new_bg_mode != st.session_state.get("bg_mode"):
+            st.session_state["bg_mode"] = new_bg_mode
+            rerun()
+
+    with col2:
+        if st.session_state.get("bg_mode") == "Solid":
+            st.color_picker("Pick a color", key="bg_solid")
+        elif st.session_state.get("bg_mode") == "Gradient":
+            st.color_picker("Start color", key="bg_grad_start")
+            st.color_picker("End color", key="bg_grad_end")
+            st.selectbox("Direction", ["to bottom right", "to bottom", "to right", "135deg"], key="bg_grad_dir")
+        elif st.session_state.get("bg_mode") == "Image":
+            st.markdown("### Image Gallery")
+            uploads = st.file_uploader("Upload new backgrounds", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+            if st.button("Update Gallery", use_container_width=True):
+                gallery = list(st.session_state.get("bg_gallery", []))
+                MAX_SIZE = 1.5 * 1024 * 1024
+                for up in uploads or []:
+                    if up.size > MAX_SIZE:
+                        st.error(f"File {up.name} is too large (>{up.size/1024/1024:.2f}MB). Limit is 1.5MB.")
+                        continue
+                    raw = up.read()
+                    b64 = base64.b64encode(raw).decode("ascii")
+                    gallery.append({"id": uuid.uuid4().hex[:8], "name": up.name, "data_b64": b64, "content_type": up.type})
+                st.session_state["bg_gallery"] = gallery[:8]
                 rerun()
+            
+            items = st.session_state.get("bg_gallery", [])
+            if items:
+                img_ids = [i["id"] for i in items]
+                sel_id = st.radio("Select Image", img_ids, format_func=lambda x: next(i["name"] for i in items if i["id"] == x))
+                st.session_state["bg_image_id"] = sel_id
+                
+                st.markdown("### Image Controls")
+                st.selectbox("Fit", ["Cover", "Contain", "Actual"], key="bg_image_fit")
+                st.slider("Scale (%)", 50, 200, key="bg_image_scale")
+                st.slider("X Position (%)", 0, 100, key="bg_image_pos_x")
+                st.slider("Y Position (%)", 0, 100, key="bg_image_pos_y")
 
-with tab_map["Library"]:
-    st.subheader("Notes Library")
-    c1, c2, c3, c4 = st.columns(4)
-    search_text = c1.text_input("Search")
-    visibility = c2.selectbox("Visibility", ["All", "Public", "Private"])
-    categories = sorted({(n.get("category", "General") or "General") for n in notes})
-    category_filter = c3.selectbox("Category", ["All"] + categories)
-    sort_mode = c4.selectbox("Sort", ["Pinned First", "Recently Updated", "Title A-Z"])
-    show_private_content = st.checkbox("Reveal private content", value=False)
+    st.divider()
+    if st.button("Save Appearance Globally", type="primary", use_container_width=True):
+        payload = {
+            "theme": st.session_state.get("theme_name"),
+            "background_mode": st.session_state.get("bg_mode"),
+            "background_solid": st.session_state.get("bg_solid"),
+            "background_gradient_start": st.session_state.get("bg_grad_start"),
+            "background_gradient_end": st.session_state.get("bg_grad_end"),
+            "background_gradient_dir": st.session_state.get("bg_grad_dir"),
+            "background_image_id": st.session_state.get("bg_image_id"),
+            "background_image_fit": st.session_state.get("bg_image_fit"),
+            "background_image_scale": st.session_state.get("bg_image_scale"),
+            "background_image_pos_x": st.session_state.get("bg_image_pos_x"),
+            "background_image_pos_y": st.session_state.get("bg_image_pos_y"),
+            "backgrounds": st.session_state.get("bg_gallery", []),
+        }
+        _, err = auth_request("PUT", "/auth/preferences", payload=payload)
+        if err: st.error(err)
+        else: st.success("Settings saved to your profile!")
 
-    filtered = []
-    search_text = search_text.strip().lower()
-    for note in notes:
-        if visibility == "Public" and note.get("is_private"):
-            continue
-        if visibility == "Private" and not note.get("is_private"):
-            continue
-        note_category = note.get("category", "General") or "General"
-        if category_filter != "All" and note_category != category_filter:
-            continue
-        if search_text:
-            haystack = (
-                f"{note.get('id', '')} {note.get('title', '')} "
-                f"{note.get('content', '')} {note_category} {' '.join(note.get('tags', []))}"
-            ).lower()
-            if search_text not in haystack:
-                continue
-        filtered.append(note)
-
-    filtered = sort_notes(filtered, sort_mode)
-    st.caption(f"Showing {len(filtered)} of {len(notes)} notes")
-
-    for note in filtered:
-        visibility_label = "PRIVATE" if note.get("is_private") else "PUBLIC"
-        pin_label = "PINNED" if note.get("pinned") else "UNPINNED"
-        tags = ", ".join(note.get("tags", [])) or "None"
-        content_preview = format_content(note, reveal_private=show_private_content)
-        created_at = _format_timestamp(note.get("created_at"))
-        st.markdown(
-            f"""
-            <div class="note-card">
-                <h4>{note.get("title", "")}</h4>
-                <p class="meta-text">ID: {note.get("id", "")} | {pin_label} | {visibility_label}</p>
-                <p class="meta-text">Category: {note.get("category", "General")} | Tags: {tags}</p>
-                <p class="meta-text">Created: {created_at}</p>
-                <p>{content_preview}</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        attachments = note.get("attachments", [])
-        if attachments:
-            with st.expander("Attachments"):
-                for attachment in attachments:
-                    filename = attachment.get("filename", "attachment")
-                    content_type = attachment.get("content_type", "application/octet-stream")
-                    data_b64 = attachment.get("data_b64", "")
-                    try:
-                        data = base64.b64decode(data_b64)
-                    except (ValueError, TypeError):
-                        data = b""
-                    if content_type.startswith("image/") and data:
-                        st.image(data, caption=filename)
-                    st.download_button(
-                        label=f"Download {filename}",
-                        data=data,
-                        file_name=filename,
-                        mime=content_type,
-                    )
-        b1, b2 = st.columns(2)
-        toggle_pin = not note.get("pinned", False)
-        pin_text = "Pin" if toggle_pin else "Unpin"
-        if b1.button(
-            f"{pin_text} {note.get('id')}",
-            key=f"pin_{note.get('id')}",
-            disabled=not can_edit,
-        ):
-            _, err = api_request("PUT", f"{note.get('id')}/pin", payload={"pinned": toggle_pin})
-            if err:
-                st.error(err)
-            else:
-                rerun()
-        if b2.button(
-            f"Delete {note.get('id')}",
-            key=f"delete_{note.get('id')}",
-            disabled=not can_edit,
-        ):
-            _, err = api_request("DELETE", note.get("id"))
-            if err:
-                st.error(err)
-            else:
-                st.success("Note deleted")
-                rerun()
-
-if "Manage" in tab_map:
-    with tab_map["Manage"]:
-        st.subheader("Update Existing Note")
-        ids = [note.get("id", "") for note in notes]
-        if not ids:
-            st.info("No notes available. Create one first.")
+elif current_view == "All Notes":
+    # Three-Column Layout for Note List and Editor
+    note_list_col, editor_col = st.columns([1, 1.5], gap="large")
+    
+    with note_list_col:
+        st.subheader("All Notes")
+        
+        # Filtering notes based on search text
+        filtered_notes = [
+            n for n in notes 
+            if search_text in n.get("title", "").lower() or search_text in n.get("content", "").lower()
+        ]
+        
+        if not filtered_notes:
+            st.info("No matching notes found.")
         else:
-            selected_id = st.selectbox("Select Note ID", ids)
-            selected = next((note for note in notes if note.get("id") == selected_id), None)
-            if selected:
-                with st.form("update_note_form"):
-                    u_title = st.text_input("Title", value=selected.get("title", ""))
-                    u_content = st.text_area("Content", value=selected.get("content", ""), height=180)
-                    col1, col2 = st.columns(2)
-                    u_category = col1.text_input("Category", value=selected.get("category", "General"))
-                    u_tags = col2.text_input("Tags (comma separated)", value=", ".join(selected.get("tags", [])))
-                    keep_attachments = st.checkbox("Keep existing attachments", value=True)
-                    new_attachments = st.file_uploader(
-                        "Add attachments",
-                        accept_multiple_files=True,
-                        key="update_attachments",
-                    )
-                    col3, col4 = st.columns(2)
-                    u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
-                    u_private = col4.checkbox("Private", value=selected.get("is_private", False))
-                    submitted = st.form_submit_button("Update Note")
+            for note in filtered_notes:
+                is_selected = st.session_state.get("selected_note_id") == note.get("id")
+                active_card = "active" if is_selected else ""
+                
+                st.markdown(
+                    f"""
+                    <div class="note-card {active_card}">
+                        <div class="note-title">{note.get('title', 'Untitled')}</div>
+                        <div class="note-meta">
+                            <span class="tag">{note.get('category', 'General')}</span>
+                            <span>{_format_timestamp(note.get('created_at'))}</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                if st.button("Open", key=f"open_{note.get('id')}", use_container_width=True):
+                    st.session_state["selected_note_id"] = note.get("id")
+                    st.session_state["show_create_form"] = False
+                    rerun()
 
-                if submitted:
-                    attachments_payload = []
-                    if keep_attachments:
-                        attachments_payload.extend(selected.get("attachments", []))
-                    attachments_payload.extend(_encode_attachments(new_attachments))
+    with editor_col:
+        selected_id = st.session_state.get("selected_note_id")
+        show_create = st.session_state.get("show_create_form", False)
+        
+        if show_create:
+            st.subheader("Create a New Note")
+            with st.form("new_note_form_modern"):
+                title = st.text_input("Title")
+                content = st.text_area("Write your notes here...", height=300)
+                category = st.text_input("Category (e.g. work, personal)")
+                is_private = st.checkbox("Private note")
+                
+                cols = st.columns([1, 1])
+                with cols[0]:
+                    save = st.form_submit_button("Save Note", use_container_width=True)
+                
+                if save:
+                    # Logic to save note
                     payload = {
-                        "id": selected_id,
-                        "title": u_title.strip(),
-                        "content": u_content.strip(),
-                        "pinned": u_pinned,
-                        "is_private": u_private,
-                        "category": u_category.strip() or "General",
-                        "tags": parse_tags(u_tags),
-                        "attachments": attachments_payload,
+                        "id": str(uuid.uuid4())[:8],
+                        "title": title.strip() or "Untitled",
+                        "content": content,
+                        "category": category.strip() or "General",
+                        "is_private": is_private,
+                        "author": st.session_state["user"].get("username")
                     }
-                    result, err = api_request("PUT", selected_id, payload=payload)
-                    if err:
-                        st.error(err)
+                    _, err = auth_request("POST", "/notes", payload=payload)
+                    if err: st.error(err)
                     else:
-                        st.success(result.get("message", "Note updated"))
+                        st.success("Note created!")
+                        st.session_state["show_create_form"] = False
                         rerun()
+        
+        elif selected_id:
+            note = next((n for n in notes if n.get("id") == selected_id), None)
+            if note:
+                st.subheader(note.get("title", "Editing Note"))
+                with st.form("edit_note_form_modern"):
+                    title = st.text_input("Title", value=note.get("title", ""))
+                    content = st.text_area("Content", value=note.get("content", ""), height=400)
+                    
+                    cols = st.columns([1, 1])
+                    with cols[0]:
+                        save = st.form_submit_button("Update", use_container_width=True)
+                    with cols[1]:
+                        delete = st.form_submit_button("Delete", use_container_width=True)
+                    
+                    if save:
+                        # Logic to update
+                        payload = note.copy()
+                        payload["title"] = title
+                        payload["content"] = content
+                        _, err = auth_request("PUT", f"/notes/{selected_id}", payload=payload)
+                        if err: st.error(err)
+                        else: rerun()
+                    
+                    if delete:
+                        _, err = auth_request("DELETE", f"/notes/{selected_id}")
+                        if err: st.error(err)
+                        else:
+                            st.session_state["selected_note_id"] = None
+                            rerun()
+            else:
+                st.info("Select a note to view/edit.")
+        else:
+            st.info("Select a note from the list or click '+ New Note' to begin.")
 
-with tab_map["Requests"]:
+
+
+elif current_view == "Manage":
+    st.subheader("Update Existing Note")
+    ids = [note.get("id", "") for note in notes]
+    if not ids:
+        st.info("No notes available. Create one first.")
+    else:
+        selected_id = st.selectbox("Select Note ID", ids, key="manage_select_id")
+        selected = next((note for note in notes if note.get("id") == selected_id), None)
+        if selected:
+            with st.form("update_note_form"):
+                u_title = st.text_input("Title", value=selected.get("title", ""))
+                u_content = st.text_area("Content", value=selected.get("content", ""), height=180)
+                col1, col2 = st.columns(2)
+                u_category = col1.text_input("Category", value=selected.get("category", "General"))
+                u_tags = col2.text_input("Tags (comma separated)", value=", ".join(selected.get("tags", [])))
+                keep_attachments = st.checkbox("Keep existing attachments", value=True)
+                new_attachments = st.file_uploader(
+                    "Add attachments",
+                    accept_multiple_files=True,
+                    key="update_attachments",
+                )
+                col3, col4 = st.columns(2)
+                u_pinned = col3.checkbox("Pinned", value=selected.get("pinned", False))
+                u_private = col4.checkbox("Private", value=selected.get("is_private", False))
+                submitted = st.form_submit_button("Update Note")
+
+            if submitted:
+                attachments_payload = []
+                if keep_attachments:
+                    attachments_payload.extend(selected.get("attachments", []))
+                attachments_payload.extend(_encode_attachments(new_attachments))
+                payload = {
+                    "id": selected_id,
+                    "title": u_title.strip(),
+                    "content": u_content.strip(),
+                    "pinned": u_pinned,
+                    "is_private": u_private,
+                    "category": u_category.strip() or "General",
+                    "tags": parse_tags(u_tags),
+                    "attachments": attachments_payload,
+                }
+                result, err = api_request("PUT", selected_id, payload=payload)
+                if err:
+                    st.error(err)
+                else:
+                    st.success(result.get("message", "Note updated"))
+                    rerun()
+
+elif current_view == "Requests":
     st.subheader("Request Changes")
     action = st.selectbox("Action", ["Create", "Update", "Delete", "Pin/Unpin"])
     reason = st.text_input("Reason for change")
@@ -1319,24 +1406,24 @@ with tab_map["Requests"]:
             submit_request = st.form_submit_button("Submit Create Request")
         if submit_request:
             payload = {
-                "id": note_id.strip(),
-                "title": title.strip(),
-                "content": content.strip(),
-                "pinned": pinned,
-                "is_private": is_private,
-                "category": category.strip() or "General",
-                "tags": parse_tags(tags_raw),
-                "attachments": _encode_attachments(attachments),
+                "action": "create",
+                "reason": reason,
+                "note_id": note_id,
+                "payload": {
+                    "id": note_id,
+                    "title": title,
+                    "content": content,
+                    "category": category,
+                    "tags": parse_tags(tags_raw),
+                    "pinned": pinned,
+                    "is_private": is_private,
+                    "attachments": _encode_attachments(attachments)
+                }
             }
-            result, err = auth_request(
-                "POST",
-                "/notes/requests",
-                payload={"action": "create", "payload": payload, "reason": reason.strip() or None},
-            )
-            if err:
-                st.error(err)
+            _, err = auth_request("POST", "/notes/requests", payload=payload)
+            if err: st.error(err)
             else:
-                st.success(result.get("message", "Request submitted"))
+                st.success("Request submitted")
                 rerun()
 
     if action in {"Update", "Delete", "Pin/Unpin"}:
@@ -1434,280 +1521,51 @@ with tab_map["Requests"]:
                         st.success(result.get("message", "Request submitted"))
                         rerun()
 
-if "Admin" in tab_map:
-    with tab_map["Admin"]:
-        st.subheader("All Notes (Admin)")
-        if notes_error:
-            st.error(notes_error)
-        else:
-            st.download_button(
-                label="Export Notes (JSON)",
-                data=json.dumps(notes, indent=2),
-                file_name="notes_admin_export.json",
-                mime="application/json",
-            )
-            st.dataframe(notes, use_container_width=True)
-
+elif current_view == "Admin":
+    st.subheader("Admin Control Center")
+    admin_tabs = st.tabs(["Users", "Requests", "System"])
+    
+    with admin_tabs[0]:
         st.subheader("User Directory")
         users_payload, users_error = auth_request("GET", "/auth/admin/users")
-        if users_error:
-            st.error(users_error)
+        if users_error: st.error(users_error)
         else:
             users = users_payload.get("users", [])
-            st.download_button(
-                label="Export Users (JSON)",
-                data=json.dumps(users, indent=2),
-                file_name="users_admin_export.json",
-                mime="application/json",
-            )
             st.dataframe(users, use_container_width=True)
+            
+            with st.form("admin_user_form"):
+                u = st.selectbox("Target User", [usr.get("username") for usr in users])
+                role = st.selectbox("New Role", ["", "client", "editor", "admin"])
+                submit = st.form_submit_button("Apply Changes")
+                if submit and role:
+                    _, err = auth_request("PATCH", f"/auth/admin/users/{u}", payload={"role": role})
+                    if err: st.error(err)
+                    else: st.success("User updated!"); rerun()
 
-            with st.form("admin_update_user"):
-                target_username = st.selectbox("User", [u.get("username", "") for u in users])
-                new_display_name = st.text_input("New display name")
-                new_role = st.selectbox("New role", ["", "client", "editor", "admin"])
-                update_submit = st.form_submit_button("Update User")
-            if update_submit:
-                payload = {}
-                if new_display_name.strip():
-                    payload["display_name"] = new_display_name.strip()
-                if new_role:
-                    payload["role"] = new_role
-                result, error = auth_request(
-                    "PATCH",
-                    f"/auth/admin/users/{target_username}",
-                    payload=payload,
-                )
-                if error:
-                    st.error(error)
-                else:
-                    st.success(result.get("message", "User updated"))
-                    rerun()
-
-            st.markdown("### Admin Actions")
-            with st.form("admin_reset_password"):
-                reset_username = st.selectbox("Reset password for", [u.get("username", "") for u in users])
-                reset_password = st.text_input("New password", type="password")
-                reset_submit = st.form_submit_button("Reset Password")
-            if reset_submit:
-                result, error = auth_request(
-                    "POST",
-                    f"/auth/admin/users/{reset_username}/reset-password",
-                    payload={"password": reset_password},
-                )
-                if error:
-                    st.error(error)
-                else:
-                    st.success(result.get("message", "Password reset"))
-                    rerun()
-
-            with st.form("admin_delete_user"):
-                delete_username = st.selectbox("Delete user", [u.get("username", "") for u in users])
-                delete_submit = st.form_submit_button("Delete User")
-            if delete_submit:
-                result, error = auth_request(
-                    "DELETE",
-                    f"/auth/admin/users/{delete_username}",
-                )
-                if error:
-                    st.error(error)
-                else:
-                    st.success(result.get("message", "User deleted"))
-                    rerun()
-
-        with st.form("admin_create_user_main"):
-            st.subheader("Create User")
-            new_username = st.text_input("Username")
-            new_display_name = st.text_input("Display name")
-            new_password = st.text_input("Password", type="password")
-            new_role = st.selectbox("Role", ["client", "editor", "admin"])
-            create_submit = st.form_submit_button("Create User")
-            if create_submit:
-                payload = {
-                    "username": new_username.strip(),
-                    "password": new_password,
-                    "display_name": new_display_name.strip() or None,
-                    "role": new_role,
-                }
-                result, error = auth_request("POST", "/auth/admin/users", payload=payload)
-                if error:
-                    st.error(error)
-                else:
-                    st.success(result.get("message", "User created"))
-                    rerun()
-
-        st.subheader("User Appearance")
-        users_payload, users_error = auth_request("GET", "/auth/admin/users")
-        if users_error:
-            st.error(users_error)
+    with admin_tabs[1]:
+        st.subheader("Pending Requests")
+        req_payload, req_err = auth_request("GET", "/notes/requests?status=pending")
+        if req_err: st.error(req_err)
         else:
-            users = users_payload.get("users", [])
-            user_choices = [u.get("username", "") for u in users if u.get("username")]
-            target_user = st.selectbox("Select user", user_choices, key="admin_pref_user")
-            if st.button("Load preferences"):
-                prefs_payload, pref_error = auth_request(
-                    "GET",
-                    f"/auth/admin/users/{target_user}/preferences",
-                )
-                if pref_error:
-                    st.error(pref_error)
-                else:
-                    st.session_state["admin_pref_data"] = prefs_payload or {}
-
-            admin_prefs = st.session_state.get("admin_pref_data", {})
-            admin_gallery = list(admin_prefs.get("backgrounds", [])) if isinstance(admin_prefs, dict) else []
-            st.markdown("**Background gallery**")
-            admin_uploads = st.file_uploader(
-                "Add images for user",
-                type=["png", "jpg", "jpeg"],
-                accept_multiple_files=True,
-                key="admin_bg_uploads",
-            )
-            if st.button("Add to user gallery"):
-                admin_gallery.extend(_encode_background_uploads(admin_uploads))
-                admin_gallery = admin_gallery[:8]
-                admin_prefs["backgrounds"] = admin_gallery
-                st.session_state["admin_pref_data"] = admin_prefs
-
-            if admin_gallery:
-                ids = [item.get("id") for item in admin_gallery]
-                selected_id = st.radio(
-                    "Select background",
-                    ids,
-                    index=ids.index(admin_prefs.get("background_image_id")) if admin_prefs.get("background_image_id") in ids else 0,
-                    format_func=lambda i: next((item.get("name", "image") for item in admin_gallery if item.get("id") == i), "image"),
-                    key="admin_bg_pick",
-                )
-                admin_prefs["background_image_id"] = selected_id
-                if st.button("Remove selected image"):
-                    admin_gallery = [item for item in admin_gallery if item.get("id") != selected_id]
-                    admin_prefs["backgrounds"] = admin_gallery
-                    if admin_prefs.get("background_image_id") == selected_id:
-                        admin_prefs["background_image_id"] = None
-                    st.session_state["admin_pref_data"] = admin_prefs
-
-            st.markdown("**Theme & background defaults**")
-            admin_prefs["theme"] = st.selectbox(
-                "Theme",
-                list(THEMES.keys()),
-                index=list(THEMES.keys()).index(admin_prefs.get("theme", "Dark")) if admin_prefs.get("theme") in THEMES else 1,
-                key="admin_theme",
-            )
-            admin_prefs["background_mode"] = st.selectbox(
-                "Background mode",
-                ["Theme Default", "Solid", "Gradient", "Image"],
-                index=["Theme Default", "Solid", "Gradient", "Image"].index(admin_prefs.get("background_mode", "Theme Default"))
-                if admin_prefs.get("background_mode") in {"Theme Default", "Solid", "Gradient", "Image"}
-                else 0,
-                key="admin_bg_mode",
-            )
-            admin_prefs["background_image_fit"] = st.selectbox(
-                "Image fit",
-                ["Cover", "Contain", "Actual"],
-                index=["Cover", "Contain", "Actual"].index(admin_prefs.get("background_image_fit", "Cover"))
-                if admin_prefs.get("background_image_fit") in {"Cover", "Contain", "Actual"}
-                else 0,
-                key="admin_bg_fit",
-            )
-            admin_prefs["background_image_scale"] = st.slider(
-                "Image scale (%)",
-                50,
-                200,
-                value=int(admin_prefs.get("background_image_scale", 100) or 100),
-                key="admin_bg_scale",
-            )
-            admin_prefs["background_image_pos_x"] = st.slider(
-                "Image position X (%)",
-                0,
-                100,
-                value=int(admin_prefs.get("background_image_pos_x", 50) or 50),
-                key="admin_bg_pos_x",
-            )
-            admin_prefs["background_image_pos_y"] = st.slider(
-                "Image position Y (%)",
-                0,
-                100,
-                value=int(admin_prefs.get("background_image_pos_y", 50) or 50),
-                key="admin_bg_pos_y",
-            )
-            admin_prefs["background_solid"] = st.color_picker(
-                "Solid color",
-                admin_prefs.get("background_solid", "#0b1020"),
-                key="admin_bg_solid",
-            )
-            admin_prefs["background_gradient_start"] = st.color_picker(
-                "Gradient start",
-                admin_prefs.get("background_gradient_start", "#0b1020"),
-                key="admin_bg_start",
-            )
-            admin_prefs["background_gradient_end"] = st.color_picker(
-                "Gradient end",
-                admin_prefs.get("background_gradient_end", "#1f2937"),
-                key="admin_bg_end",
-            )
-            admin_prefs["background_gradient_dir"] = st.selectbox(
-                "Gradient direction",
-                ["to bottom right", "to bottom", "to right", "135deg", "45deg"],
-                index=["to bottom right", "to bottom", "to right", "135deg", "45deg"].index(
-                    admin_prefs.get("background_gradient_dir", "to bottom right")
-                )
-                if admin_prefs.get("background_gradient_dir") in {"to bottom right", "to bottom", "to right", "135deg", "45deg"}
-                else 0,
-                key="admin_bg_dir",
-            )
-            admin_prefs["hide_sidebar"] = st.checkbox(
-                "Hide sidebar for user",
-                value=bool(admin_prefs.get("hide_sidebar", False)),
-                key="admin_hide_sidebar",
-            )
-
-            if st.button("Save user appearance"):
-                admin_prefs["backgrounds"] = admin_gallery
-                _, save_error = auth_request(
-                    "PUT",
-                    f"/auth/admin/users/{target_user}/preferences",
-                    payload=admin_prefs,
-                )
-                if save_error:
-                    st.error(save_error)
-                else:
-                    st.success("User appearance saved.")
-
-        st.subheader("Change Requests")
-        requests_payload, requests_error = auth_request("GET", "/notes/requests?status=pending")
-        if requests_error:
-            st.error(requests_error)
-        else:
-            pending_requests = requests_payload.get("requests", [])
-            st.dataframe(pending_requests, use_container_width=True)
-
-            request_ids = [r.get("_id", "") for r in pending_requests if r.get("_id")]
-            if request_ids:
-                with st.form("admin_resolve_request"):
-                    selected_request = st.selectbox("Request ID", request_ids)
-                    decline_reason = st.text_input("Decline reason (optional)")
-                    approve = st.form_submit_button("Approve")
-                    decline = st.form_submit_button("Decline")
-                if approve:
-                    result, error = auth_request(
-                        "POST",
-                        f"/notes/requests/{selected_request}/approve",
-                    )
-                    if error:
-                        st.error(error)
-                    else:
-                        st.success(result.get("message", "Request approved"))
-                        rerun()
-                if decline:
-                    result, error = auth_request(
-                        "POST",
-                        f"/notes/requests/{selected_request}/decline",
-                        payload={"reason": decline_reason.strip() or None},
-                    )
-                    if error:
-                        st.error(error)
-                    else:
-                        st.success(result.get("message", "Request declined"))
-                        rerun()
+            preqs = req_payload.get("requests", [])
+            if not preqs: st.info("No pending requests.")
             else:
-                st.info("No pending requests.")
+                st.dataframe(preqs, use_container_width=True)
+
+    with admin_tabs[2]:
+        st.subheader("System Information")
+        st.write("Streamlit Version:", st.__version__)
+        if st.button("Download System Logs"):
+            st.info("Log download started...")
+
+# Final Footer
+st.markdown(
+    """
+    <div style="text-align: center; padding: 60px 20px; color: #94a3b8; font-size: 0.9rem; border-top: 1px solid #e2e8f0; margin-top: 80px;">
+        <div style="margin-bottom: 10px;">Powered by FastAPI & Streamlit</div>
+        <div style="font-size: 0.8rem; opacity: 0.7;">© 2026 NoteAPI Studio • Clean. Secure. Fast.</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
