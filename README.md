@@ -4,7 +4,7 @@
 
 You can log in without OAuth using the built-in username/password flow.
 
-1. Open `http://localhost:8501`.
+1. Open `http://localhost:8504`.
 2. In login page, use `Sign Up` tab to create a new account.
 3. Login with your created username/password.
 
@@ -28,41 +28,41 @@ Privacy note:
 ## GitHub OAuth setup
 
 1. Create a GitHub OAuth App:
-   - Homepage URL: `http://localhost:8501`
-   - Authorization callback URL: `http://localhost:8000/auth/github/callback`
+   - Homepage URL: `http://localhost:8504`
+   - Authorization callback URL: `http://localhost:8013/auth/github/callback`
 2. Copy `.env.example` to `.env` and fill:
    - `OAUTH_GITHUB_CLIENT_ID`
    - `OAUTH_GITHUB_CLIENT_SECRET`
 3. Start app:
    - `docker compose up -d --build`
-4. Open `http://localhost:8501` and click `Login with GitHub`.
+4. Open `http://localhost:8504` and click `Login with GitHub`.
 
 ## Google OAuth setup
 
 1. Create a Google OAuth Client (Web application) in Google Cloud Console.
 2. Set:
-   - Authorized JavaScript origin: `http://localhost:8501`
-   - Authorized redirect URI: `http://localhost:8000/auth/google/callback`
+   - Authorized JavaScript origin: `http://localhost:8504`
+   - Authorized redirect URI: `http://localhost:8013/auth/google/callback`
 3. Add to `.env`:
    - `OAUTH_GOOGLE_CLIENT_ID`
    - `OAUTH_GOOGLE_CLIENT_SECRET`
 4. Restart:
    - `docker compose up -d --build`
-5. Open `http://localhost:8501` and click `Login with Google`.
+5. Open `http://localhost:8504` and click `Login with Google`.
 
 ## Google Workspace (Corporate) OAuth setup
 
 1. Create a Google OAuth Client (Web application) in Google Cloud Console.
 2. Set:
-   - Authorized JavaScript origin: `http://localhost:8501`
-   - Authorized redirect URI: `http://localhost:8000/auth/google-workspace/callback`
+   - Authorized JavaScript origin: `http://localhost:8504`
+   - Authorized redirect URI: `http://localhost:8013/auth/google-workspace/callback`
 3. Add to `.env`:
    - `OAUTH_GOOGLE_WORKSPACE_CLIENT_ID`
    - `OAUTH_GOOGLE_WORKSPACE_CLIENT_SECRET`
    - `OAUTH_GOOGLE_WORKSPACE_DOMAIN` (your workspace domain, e.g. `yourcompany.com`)
 4. Restart:
    - `docker compose up -d --build`
-5. Open `http://localhost:8501` and click `Continue with Google Workspace`.
+5. Open `http://localhost:8504` and click `Continue with Google Workspace`.
 
 ### Dev/testing mode without OAuth
 
