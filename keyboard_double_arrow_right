@@ -1,0 +1,89 @@
+keyboard_double_arrow_right
+[0] (958,28)<button class='st-emotion-cache-1skhznp e1mwqyj914' />
+	[1] (958,28)<div  />
+		[2] (958,28)<span >Deploy />
+[3] (983,28)<span  />
+	[4] (983,27)<button class='st-emotion-cache-pemppy e1mwqyj915' />
+[5] (500,500)<section class='stMain st-emotion-cache-4rsbii e1td4qo61' scrollable='true' />
+	Theme & background defaults
+	Theme
+	[6] (498,81)<div  />
+		[7] (498,81)<div  />
+			[8] (489,81)<div  />
+				[9] (59,81)<div >Dark />
+				[10] (69,81)<div  />
+					[11] (69,81)<input aria-label='Selected Dark. Theme' class='st-bp st-cc st-br st-ds st-bt st-bu st-c1 st-eo st-f0 st-dl st-be st-b9 st-ba st-bb st-bc st-cp st-dz st-bi st-aw st-ax st-au st-av st-b2 st-b4 st-b1 st-b3' role='combobox' />
+			[12] (942,81)<div  />
+	[13] (498,126)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Background mode
+	[14] (498,159)<div  />
+		[15] (498,159)<div  />
+			[16] (489,159)<div  />
+				[17] (77,159)<div >Theme Default />
+				[18] (105,159)<div  />
+					[19] (105,159)<input aria-label='Selected Theme Default. Background mode' class='st-bp st-cc st-br st-ds st-bt st-bu st-c1 st-eo st-f0 st-dl st-be st-b9 st-ba st-bb st-bc st-cp st-dz st-bi st-aw st-ax st-au st-av st-b2 st-b4 st-b1 st-b3' role='combobox' />
+			[20] (942,159)<div  />
+	[21] (498,203)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Image fit
+	[22] (498,237)<div  />
+		[23] (498,237)<div  />
+			[24] (489,237)<div  />
+				[25] (61,237)<div >Cover />
+				[26] (73,237)<div  />
+					[27] (73,237)<input aria-label='Selected Cover. Image fit' class='st-bp st-cc st-br st-ds st-bt st-bu st-c1 st-eo st-f0 st-dl st-be st-b9 st-ba st-bb st-bc st-cp st-dz st-bi st-aw st-ax st-au st-av st-b2 st-b4 st-b1 st-b3' role='combobox' />
+			[28] (942,237)<div  />
+	[29] (498,281)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Image scale (%)
+	[30] (498,314)<div  />
+		[31] (498,314)<div  />
+			[32] (498,314)<div  />
+				[33] (71,314)<div aria-label='Image scale (%)' class='st-emotion-cache-1uiz08y e16ozfla1' role='slider' />
+					54
+	[34] (498,359)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Image position X (%)
+	[35] (498,392)<div  />
+		[36] (498,392)<div  />
+			[37] (498,392)<div  />
+				[38] (498,392)<div aria-label='Image position X (%)' class='st-emotion-cache-1uiz08y e16ozfla1' role='slider' />
+					50
+	[39] (498,437)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Image position Y (%)
+	[40] (498,470)<div  />
+		[41] (498,470)<div  />
+			[42] (498,470)<div  />
+				[43] (498,470)<div aria-label='Image position Y (%)' class='st-emotion-cache-1uiz08y e16ozfla1' role='slider' />
+					50
+	[44] (61,514)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Solid color
+	[45] (54,548)<div  />
+		[46] (54,548)<div  />
+	[47] (65,592)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Gradient start
+	[48] (54,625)<div  />
+		[49] (54,625)<div  />
+	[50] (64,670)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Gradient end
+	[51] (54,703)<div  />
+		[52] (54,703)<div  />
+	[53] (498,747)<label class='st-emotion-cache-cin28x e1kt9bl70' />
+		Gradient direction
+	[54] (498,781)<div  />
+		[55] (498,781)<div  />
+			[56] (489,781)<div  />
+				[57] (78,781)<div >to bottom right />
+				[58] (107,781)<div  />
+					[59] (107,781)<input aria-label='Selected to bottom right. Gradient direction' class='st-bp st-cc st-br st-ds st-bt st-bu st-c1 st-eo st-f0 st-dl st-be st-b9 st-ba st-bb st-bc st-cp st-dz st-bi st-aw st-ax st-au st-av st-b2 st-b4 st-b1 st-b3' role='combobox' />
+			[60] (942,781)<div  />
+	[61] (88,825)<label class='st-aj st-ag st-f2 st-as st-f3 st-ax st-aw st-f4' />
+		[62] (48,825)<span  />
+		[63] (93,825)<div  />
+			[64] (95,825)<div  />
+				[65] (95,825)<div  />
+					[66] (95,825)<p >Hide sidebar for user />
+	[67] (90,869)<button class='st-emotion-cache-1aleso5 e1mwqyj92' />
+		[68] (90,869)<div  />
+			[69] (90,869)<span  />
+				[70] (90,869)<div  />
+					[71] (90,869)<p >Save user appearance />
+	Change Requests
+	Note not found

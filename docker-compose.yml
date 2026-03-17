@@ -1,3 +1,5 @@
+version: '3.9'
+
 services:
 
   mongo:
@@ -11,27 +13,27 @@ services:
   fastapi:
     build:
       context: .
-      dockerfile: Dockerfile.fastapi
+      dockerfile: Dockerfile           # ← changed to match your actual file
     image: noteapi-fastapi
     container_name: fastapi
+    ports:
+      - "8000:8000"                    # expose FastAPI directly
     environment:
       - OAUTH_GITHUB_CLIENT_ID=${OAUTH_GITHUB_CLIENT_ID}
       - OAUTH_GITHUB_CLIENT_SECRET=${OAUTH_GITHUB_CLIENT_SECRET}
-      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI:-http://localhost:8013/auth/github/callback}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI:-http://localhost/auth/github/callback}
       - OAUTH_GOOGLE_CLIENT_ID=${OAUTH_GOOGLE_CLIENT_ID}
       - OAUTH_GOOGLE_CLIENT_SECRET=${OAUTH_GOOGLE_CLIENT_SECRET}
-      - OAUTH_GOOGLE_REDIRECT_URI=${OAUTH_GOOGLE_REDIRECT_URI:-http://localhost:8013/auth/google/callback}
+      - OAUTH_GOOGLE_REDIRECT_URI=${OAUTH_GOOGLE_REDIRECT_URI:-http://localhost/auth/google/callback}
       - OAUTH_GOOGLE_WORKSPACE_CLIENT_ID=${OAUTH_GOOGLE_WORKSPACE_CLIENT_ID}
       - OAUTH_GOOGLE_WORKSPACE_CLIENT_SECRET=${OAUTH_GOOGLE_WORKSPACE_CLIENT_SECRET}
-      - OAUTH_GOOGLE_WORKSPACE_REDIRECT_URI=${OAUTH_GOOGLE_WORKSPACE_REDIRECT_URI:-http://localhost:8013/auth/google-workspace/callback}
+      - OAUTH_GOOGLE_WORKSPACE_REDIRECT_URI=${OAUTH_GOOGLE_WORKSPACE_REDIRECT_URI:-http://localhost/auth/google-workspace/callback}
       - OAUTH_GOOGLE_WORKSPACE_DOMAIN=${OAUTH_GOOGLE_WORKSPACE_DOMAIN}
-      - OAUTH_STREAMLIT_URL=${OAUTH_STREAMLIT_URL:-http://localhost:8504}
+      - OAUTH_STREAMLIT_URL=${OAUTH_STREAMLIT_URL:-http://localhost}
       - BASIC_AUTH_USERNAME=${BASIC_AUTH_USERNAME:-demo}
       - BASIC_AUTH_PASSWORD=${BASIC_AUTH_PASSWORD:-demo123}
       - ADMIN_USERNAMES=${ADMIN_USERNAMES:-demo}
       - AUTH_DISABLED=${AUTH_DISABLED:-false}
-    ports:
-      - "8013:8000"
     depends_on:
       - mongo
 
@@ -41,14 +43,25 @@ services:
       dockerfile: Dockerfile.streamlit
     image: noteapi-streamlit
     container_name: streamlit
+    ports:
+      - "8501:8501"                    # expose Streamlit directly
     environment:
       - API_BASE_URL=http://fastapi:8000
-      - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL:-http://localhost:8013}
-      - PUBLIC_STREAMLIT_URL=${PUBLIC_STREAMLIT_URL:-http://localhost:8504}
-    ports:
-      - "8504:8501"
+      - PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL:-http://localhost/api}
+      - PUBLIC_STREAMLIT_URL=${PUBLIC_STREAMLIT_URL:-http://localhost}
     depends_on:
       - fastapi
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - fastapi
+      - streamlit
 
 volumes:
   mongo_data:

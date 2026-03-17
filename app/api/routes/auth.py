@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.responses import RedirectResponse
 
-from app.database.mongodb import get_session_collection, get_user_collection
+from app.database.mongodb import get_session_collection, get_user_collection, get_telemetry_collection
 from app.models.models import (
     AdminCreateUserRequest,
     AdminResetPasswordRequest,
@@ -701,3 +701,28 @@ def auth_logout(
             {"$set": {"logged_out_at": now_iso, "expires_at": now_ts}},
         )
     return {"message": "Logged out"}
+
+
+@router.post("/auth/telemetry/open")
+def log_app_open(telemetry_collection=Depends(get_telemetry_collection)):
+    # Record that the application was opened
+    telemetry_collection.insert_one({
+        "event": "app_open",
+        "timestamp": now_iso()
+    })
+    return {"message": "Logged"}
+
+
+@router.get("/auth/admin/telemetry/opens")
+def admin_get_app_opens(
+    user: User = Depends(get_current_user),
+    telemetry_collection=Depends(get_telemetry_collection)
+):
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    opens = list(telemetry_collection.find({"event": "app_open"}, {"_id": 0}).sort("timestamp", -1))
+    return {
+        "total_opens": len(opens),
+        "history": opens
+    }

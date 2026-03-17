@@ -909,6 +909,10 @@ if "prefs_loaded" not in st.session_state:
         _apply_prefs_to_state(prefs_payload)
     st.session_state["prefs_loaded"] = True
 
+if "telemetry_logged" not in st.session_state:
+    auth_request("POST", "/auth/telemetry/open")
+    st.session_state["telemetry_logged"] = True
+
 if st.session_state.pop("reset_ui", False):
     _reset_preferences()
     st.session_state["prefs_loaded"] = False
@@ -918,7 +922,17 @@ if "bg_mode_next" in st.session_state:
     st.session_state["bg_mode"] = st.session_state.pop("bg_mode_next")
 
 theme_options = list(THEMES.keys())
-theme = st.sidebar.selectbox("Theme", theme_options, key="theme_name")
+# Keep `theme_name` as the canonical theme (used throughout the app), but avoid
+# using it as a widget key so other parts of the UI can update it safely.
+if "theme_picker" not in st.session_state:
+    st.session_state["theme_picker"] = st.session_state.get("theme_name", "Dark")
+elif st.session_state.get("theme_picker") != st.session_state.get("theme_name"):
+    st.session_state["theme_picker"] = st.session_state.get("theme_name", "Dark")
+
+theme_picker = st.sidebar.selectbox("Theme", theme_options, key="theme_picker")
+if theme_picker != st.session_state.get("theme_name"):
+    st.session_state["theme_name"] = theme_picker
+    rerun()
 # apply_theme(theme) # Already applied at top level
 
 # Sidebar layout cleaned up - removed Focus/Sleep/Hide toggles
@@ -1159,15 +1173,25 @@ elif current_view == "Appearance":
     with col1:
         st.markdown("### Theme Selection")
         theme_options = list(THEMES.keys())
-        theme_idx = theme_options.index(st.session_state.get("theme_name", "Dark"))
-        new_theme = st.selectbox("Active Theme", theme_options, index=theme_idx)
+        current_theme = st.session_state.get("theme_name", "Dark")
+        if current_theme not in theme_options:
+            current_theme = theme_options[0]
+
+        if st.session_state.get("appearance_theme") != current_theme:
+            st.session_state["appearance_theme"] = current_theme
+
+        new_theme = st.selectbox("Active Theme", theme_options, key="appearance_theme")
         if new_theme != st.session_state.get("theme_name"):
             st.session_state["theme_name"] = new_theme
             rerun()
-        
+
         st.markdown("### Background Mode")
         bg_options = ["Theme Default", "Solid", "Gradient", "Image"]
-        new_bg_mode = st.selectbox("Background Style", bg_options, index=bg_options.index(st.session_state.get("bg_mode", "Theme Default")))
+        new_bg_mode = st.selectbox(
+            "Background Style",
+            bg_options,
+            index=bg_options.index(st.session_state.get("bg_mode", "Theme Default")),
+        )
         if new_bg_mode != st.session_state.get("bg_mode"):
             st.session_state["bg_mode"] = new_bg_mode
             rerun()
@@ -1530,7 +1554,7 @@ elif current_view == "Requests":
 
 elif current_view == "Admin":
     st.subheader("Admin Control Center")
-    admin_tabs = st.tabs(["Users", "Requests", "System", "Manage Notes"])
+    admin_tabs = st.tabs(["Users", "Requests", "System", "Manage Notes", "Analytics"])
     
     with admin_tabs[0]:
         st.subheader("User Directory")
@@ -1540,14 +1564,48 @@ elif current_view == "Admin":
             users = users_payload.get("users", [])
             st.dataframe(users, use_container_width=True)
             
-            with st.form("admin_user_form"):
-                u = st.selectbox("Target User", [usr.get("username") for usr in users])
-                role = st.selectbox("New Role", ["", "client", "editor", "admin"])
-                submit = st.form_submit_button("Apply Changes")
-                if submit and role:
-                    _, err = auth_request("PATCH", f"/auth/admin/users/{u}", payload={"role": role})
-                    if err: st.error(err)
-                    else: st.success("User updated!"); rerun()
+            # --- Create User ---
+            st.divider()
+            with st.expander("➕ Create New User"):
+                with st.form("admin_create_user_form"):
+                    new_username = st.text_input("Username")
+                    new_password = st.text_input("Temporary Password", type="password")
+                    new_display = st.text_input("Display Name (Optional)")
+                    new_role = st.selectbox("Role", ["client", "editor", "admin"])
+                    
+                    submit_create = st.form_submit_button("Create User")
+                    if submit_create:
+                        payload = {"username": new_username, "password": new_password, "display_name": new_display, "role": new_role}
+                        _, err = auth_request("POST", "/auth/admin/users", payload=payload)
+                        if err: st.error(err)
+                        else: st.success("User successfully created!"); rerun()
+                        
+            # --- Update User Role ---
+            with st.expander("✏️ Update User Role", expanded=False):
+                with st.form("admin_user_form"):
+                    u = st.selectbox("Target User", [usr.get("username") for usr in users], key="update_u")
+                    role = st.selectbox("New Role", ["", "client", "editor", "admin"], key="update_r")
+                    submit = st.form_submit_button("Apply Changes")
+                    if submit and role:
+                        _, err = auth_request("PATCH", f"/auth/admin/users/{u}", payload={"role": role})
+                        if err: st.error(err)
+                        else: st.success("User updated!"); rerun()
+
+            # --- Delete User ---
+            with st.expander("🗑️ Delete User (Danger Zone)", expanded=False):
+                with st.form("admin_delete_user_form"):
+                    del_u = st.selectbox("Select User to Delete", [usr.get("username") for usr in users], key="del_u")
+                    st.warning("Warning: This action cannot be undone.")
+                    confirm_del = st.checkbox("I confirm I want to delete this user", key="confirm_del")
+                    
+                    submit_del = st.form_submit_button("Delete User", type="primary")
+                    if submit_del:
+                        if confirm_del:
+                            _, err = auth_request("DELETE", f"/auth/admin/users/{del_u}")
+                            if err: st.error(err)
+                            else: st.success("User deleted!"); rerun()
+                        else:
+                            st.error("Please confirm the deletion by checking the box.")
 
     with admin_tabs[1]:
         st.subheader("Pending Requests")
@@ -1580,6 +1638,31 @@ elif current_view == "Admin":
                         if err: st.error(err)
                         else: st.success("Note deleted"); rerun()
 
+    with admin_tabs[4]:
+        st.subheader("Application Analytics")
+        stats_payload, stats_err = auth_request("GET", "/auth/admin/telemetry/opens")
+        if stats_err:
+            st.error(stats_err)
+        else:
+            total_opens = stats_payload.get("total_opens", 0)
+            st.metric("Total Application Opens", total_opens)
+            
+            history = stats_payload.get("history", [])
+            if history:
+                import pandas as pd
+                df = pd.DataFrame(history)
+                df['timestamp'] = pd.to_datetime(df['timestamp'])
+                df['Date'] = df['timestamp'].dt.date
+                
+                # Chart showing opens over days
+                opens_by_date = df.groupby('Date').size().reset_index(name='Counts')
+                st.bar_chart(opens_by_date, x='Date', y='Counts', use_container_width=True)
+                
+                st.write("Recent Opens Log:")
+                st.dataframe(df[['timestamp', 'event']].head(50), use_container_width=True)
+            else:
+                st.info("No open events recorded yet.")
+
 # Final Footer
 st.markdown(
     """
@@ -1590,4 +1673,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
